@@ -26,7 +26,7 @@ builds and deploys automatically; there is no manual deploy step.
   two styles supported; MLA, Vancouver and IEEE were deliberately removed
   to keep the citation engine fast, reliable and low-token (see
   `planning/05-deployment-plan.md`, section 2, for the reasoning).
-- Manual reference entry for books (with Google Books ISBN lookup),
+- Manual reference entry for books (with Open Library ISBN lookup),
   websites, and government/organisational reports, all stored as CSL-JSON.
 - Local-only saved-reference list (browser local storage, no account, no
   server-side storage).
@@ -64,10 +64,11 @@ Fill in `.env.local`:
 - `CROSSREF_CONTACT_EMAIL` — your email, used for Crossref's polite pool.
   Free evidence search and citation verification work without this, but
   Crossref may rate-limit harder without it.
-- `GOOGLE_BOOKS_API_KEY` — optional, raises the Google Books rate limit for
-  ISBN lookups. Works without one at a lower shared limit.
-- `OPENALEX_API_KEY` — optional, free key from openalex.org/settings/api.
-  Raises the shared OpenAlex budget; the app works without one.
+- Book ISBN lookups use Open Library, which is free and needs no key.
+- `OPENALEX_API_KEY` — required as of February 2026, when OpenAlex
+  retired its free mailto-only "polite pool". Without this key, evidence
+  search shares a $0.10/day budget across every visitor. Free, 30-second
+  signup at openalex.org, then copy the key from openalex.org/settings/api.
 - `CORE_API_KEY` — optional, only needed if the CORE supplementary source
   is switched on. Register free at core.ac.uk.
 - `PAYSTACK_SECRET_KEY` and `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY` — from your
