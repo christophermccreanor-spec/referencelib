@@ -10,7 +10,15 @@ import { extractComponents } from "@/lib/decoder/concept-extraction";
 // candidate sources; the student and their assessor judge relevance.
 export function extractParagraphSearchTerms(paragraph: string): string[] {
   const components = extractComponents(paragraph);
+  // One representative term per concept, not every synonym variant; see the
+  // matching comment in decode.ts for why this matters once only the first
+  // few terms are actually sent to the search API.
   return Array.from(
-    new Set(components.flatMap((c) => c.searchTerms).filter((t) => t.length > 2))
+    new Set(
+      components
+        .filter((c) => c.type === "concept")
+        .map((c) => c.searchTerms[0])
+        .filter((t): t is string => Boolean(t) && t.length > 2)
+    )
   );
 }
