@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { REFERENCING_STYLE_LABELS, ReferencingStyle, SavedReference } from "@/lib/types";
 import { renderBibliographyEntries, renderInTextCitationForItem } from "@/lib/citation/csl/client";
 import { AdSlot } from "@/components/AdSlot";
@@ -10,6 +11,9 @@ export function SavedReferencePanel({
   onStyleChange,
   onRemove,
   onExport,
+  onExportJson,
+  onImportFile,
+  importMessage,
   onOpenManualEntry,
 }: {
   refs: SavedReference[];
@@ -19,8 +23,19 @@ export function SavedReferencePanel({
   onStyleChange: (style: ReferencingStyle) => void;
   onRemove: (id: string) => void;
   onExport: () => void;
+  onExportJson: () => void;
+  onImportFile: (file: File) => void;
+  importMessage?: { text: string; isError: boolean } | null;
   onOpenManualEntry: () => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) onImportFile(file);
+    // Reset so choosing the same filename again still fires onChange.
+    e.target.value = "";
+  }
   async function handleCopy(ref: SavedReference) {
     try {
       const citation = await renderInTextCitationForItem(ref.evidence, style);
@@ -103,6 +118,35 @@ export function SavedReferencePanel({
         <div className="text-xs text-neutral-500">
           Saved on this device only. Clearing browser data removes it. A free account only becomes
           necessary when you use the AI paragraph-checking feature, not for search, saving or citations.
+        </div>
+
+        <div className="grid gap-1.5 border-t border-neutral-200 pt-3">
+          <span className="text-xs font-medium text-neutral-700">Move to another device</span>
+          <div className="flex gap-2">
+            <button className="btn btn-ghost" onClick={onExportJson} disabled={refs.length === 0}>
+              Export references
+            </button>
+            <button className="btn btn-ghost" onClick={() => fileInputRef.current?.click()}>
+              Import references
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={handleFileChosen}
+            />
+          </div>
+          <div className="text-xs text-neutral-500">
+            Export saves a file you can bring into ReferenceLib on another device or browser.
+            Importing only adds references, it never removes or overwrites what is already saved
+            here.
+          </div>
+          {importMessage && (
+            <div className={`text-xs ${importMessage.isError ? "text-red-600" : "text-emerald-700"}`}>
+              {importMessage.text}
+            </div>
+          )}
         </div>
       </section>
       <AdSlot label="Advertising position 3 of 3: desktop rectangle, below the saved-reference panel." />
