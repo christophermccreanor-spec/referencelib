@@ -24,6 +24,25 @@ function cleanIsbn(raw: string): string {
   return raw.replace(/[^0-9Xx]/g, "");
 }
 
+// Google's Books backend occasionally returns a transient 503
+// ("backendFailed") on an otherwise valid, correctly authenticated
+// request. This is a known short-lived condition on Google's side, not
+// an error in our request, and a single quick retry almost always
+// clears it. Only 503 is retried; 4xx errors (bad key, bad request) fail
+// immediately since retrying would not help.
+async function fetchWithRetry(url: string): Promise<Response> {
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (res.status !== 503) return res;
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  return fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(8000),
+  });
+}
+
 export async function lookupBookByIsbn(isbn: string): Promise<GoogleBooksLookupResult | null> {
   const cleaned = cleanIsbn(isbn);
   if (cleaned.length !== 10 && cleaned.length !== 13) {
@@ -34,10 +53,7 @@ export async function lookupBookByIsbn(isbn: string): Promise<GoogleBooksLookupR
   const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
   if (apiKey) params.set("key", apiKey);
 
-  const res = await fetch(`${GOOGLE_BOOKS_BASE}?${params.toString()}`, {
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(8000),
-  });
+  const res = await fetchWithRetry(`${GOOGLE_BOOKS_BASE}?${params.toString()}`);
   if (!res.ok) {
     throw new Error(`Google Books request failed: ${res.status}`);
   }
