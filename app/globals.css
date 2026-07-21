@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background: #f7f6f2;
+  color: #2c2c2a;
+}
+
+.btn {
+  @apply inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 hover:bg-neutral-50;
+}
+.btn-primary {
+  @apply border-primary bg-primary text-white hover:bg-primary-dark;
+}
+.btn-ghost {
+  @apply border-transparent bg-transparent hover:bg-neutral-100;
+}
+.panel {
+  @apply grid gap-3 rounded-xl border border-neutral-200 bg-white p-4;
+}
+.form-label {
+  @apply grid gap-1.5 text-sm font-medium text-neutral-800;
+}
+.form-control {
+  @apply w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary;
+}
+.badge {
+  @apply inline-block rounded-full bg-primary-tint px-2.5 py-0.5 text-xs font-medium text-primary-dark;
+}
+.ad-slot {
+  @apply rounded-lg border border-dashed border-neutral-300 bg-neutral-100 p-3 text-center text-xs text-neutral-500;
+}
