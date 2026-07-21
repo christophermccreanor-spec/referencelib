@@ -23,6 +23,8 @@ import { evidenceCardToCitationRecord } from "@/lib/citation/csl/adapter";
 import { renderFullReference } from "@/lib/citation/csl/client";
 import {
   addSavedReference,
+  exportReferencesToFile,
+  importReferencesFromJson,
   loadProjectName,
   loadSavedReferences,
   removeSavedReference,
@@ -86,6 +88,7 @@ export default function Page() {
   const [savedRefs, setSavedRefs] = useState<SavedReference[]>([]);
   const [projectName, setProjectName] = useState("My assignment");
   const [manualEntryOpen, setManualEntryOpen] = useState(false);
+  const [importMessage, setImportMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
   useEffect(() => {
     setSavedRefs(loadSavedReferences());
@@ -229,6 +232,23 @@ export default function Page() {
   function handleProjectNameChange(name: string) {
     setProjectName(name);
     saveProjectName(name);
+  }
+
+  function handleImportFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const raw = typeof reader.result === "string" ? reader.result : "";
+      const result = importReferencesFromJson(raw, savedRefs);
+      setSavedRefs(result.merged);
+      if (result.error) {
+        setImportMessage({ text: result.error, isError: true });
+      } else {
+        const skippedNote = result.skippedCount > 0 ? `, ${result.skippedCount} already saved` : "";
+        setImportMessage({ text: `Added ${result.addedCount} reference${result.addedCount === 1 ? "" : "s"}${skippedNote}.`, isError: false });
+      }
+    };
+    reader.onerror = () => setImportMessage({ text: "Could not read that file. Please try again.", isError: true });
+    reader.readAsText(file);
   }
 
   const copy = VIEW_COPY[view];
@@ -465,6 +485,9 @@ export default function Page() {
           onStyleChange={setStyle}
           onRemove={handleRemove}
           onExport={() => void exportReferenceList(savedRefs, style, projectName)}
+          onExportJson={() => exportReferencesToFile(savedRefs, projectName)}
+          onImportFile={handleImportFile}
+          importMessage={importMessage}
           onOpenManualEntry={() => setManualEntryOpen(true)}
         />
       </div>
