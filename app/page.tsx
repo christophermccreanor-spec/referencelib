@@ -464,7 +464,7 @@ export default function Page() {
           style={style}
           onStyleChange={setStyle}
           onRemove={handleRemove}
-          onExport={() => void exportReferenceList(savedRefs, style)}
+          onExport={() => void exportReferenceList(savedRefs, style, projectName)}
           onOpenManualEntry={() => setManualEntryOpen(true)}
         />
       </div>

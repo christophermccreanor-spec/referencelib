@@ -22,6 +22,24 @@ export function Footer() {
         ))}
       </div>
       <div>This tool supports research and citation accuracy. It does not provide individual research support and does not write assignment answers.</div>
+      <div className="flex flex-wrap items-center gap-3">
+        <a
+          href="https://www.buymeacoffee.com/christopheu3"
+          target="_blank"
+          rel="noreferrer"
+          className="btn btn-ghost"
+        >
+          ☕ Support this project
+        </a>
+        <a
+          href="https://lovable.dev/projects/977cab57-8a71-4900-b9e8-b9a353d2ad9e"
+          target="_blank"
+          rel="noreferrer"
+          className="text-neutral-700 hover:underline"
+        >
+          More ways to support development
+        </a>
+      </div>
       <div>
         Dr Christopher Paul Andrew McCreanor ·{" "}
         <a
