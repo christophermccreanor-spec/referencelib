@@ -4,6 +4,16 @@ const STOPWORDS = new Set([
   "the", "a", "an", "of", "and", "or", "to", "for", "in", "on", "with", "your", "you",
   "is", "are", "be", "how", "what", "why", "does", "do", "their", "its", "as", "at",
   "by", "from", "that", "this", "these", "those", "into", "using", "based",
+  // Instructional/meta words describe how to answer, not what the question
+  // is about, so they must never end up inside a concept label or an
+  // evidence search term. Added after a live pilot question ("Your response
+  // should focus particularly on...") produced the literal search term
+  // "response should focus particularly", which returned evidence about an
+  // entirely unrelated topic (climate change) instead of the question's own
+  // subject. See planning/05-deployment-plan.md.
+  "response", "should", "must", "will", "shall", "particularly", "focus",
+  "ensure", "need", "needs", "make", "sure", "clearly", "fully", "answer",
+  "submission", "also", "further",
 ]);
 
 const COMMAND_VERBS = [
@@ -12,13 +22,41 @@ const COMMAND_VERBS = [
   "justify", "outline", "define", "identify", "describe", "explain", "apply", "examine", "critique",
 ];
 
-// Rule-based, no AI: split the question on command verbs and "and", extract
-// noun-ish phrases as core concepts, and generate grouped search terms per
+// Common assignment-brief scaffolding that introduces the real content
+// further into the sentence (e.g. "Your response should focus particularly
+// on X"). Stripped wholesale, case-insensitively, before concept extraction
+// so the instructional stem itself is never mistaken for a concept, and the
+// words that follow it are read as the start of a clause in their own
+// right rather than a continuation of "should focus...".
+const INSTRUCTION_LEAD_INS = [
+  /\byour\s+(?:response|answer|work|submission)\s+(?:should|must|is\s+expected\s+to|needs?\s+to)\s+(?:also\s+)?(?:focus\s+(?:particularly\s+)?on|address|cover|consider|include|discuss|examine|explore)\b/gi,
+  /\byou\s+(?:should|must|need\s+to)\s+(?:also\s+)?(?:focus\s+(?:particularly\s+)?on|consider|address|include|discuss|examine|explore)\b/gi,
+  /\b(?:consideration|attention)\s+should\s+be\s+given\s+to\b/gi,
+  /\bmake\s+sure\s+(?:you|your\s+answer|your\s+response)\s+(?:also\s+)?(?:cover|address|include|discuss)s?\b/gi,
+];
+
+// Rule-based, no AI: strip instructional scaffolding, assessment-criteria
+// references and the scenario organisation's name, split the question on
+// command verbs and list structure (commas, "and"), and extract short
+// noun-ish phrases as core concepts, generating grouped search terms per
 // component rather than searching the raw sentence, per architecture doc
 // section 4.
 export function extractComponents(question: string): QuestionComponent[] {
   const components: QuestionComponent[] = [];
-  const lower = question.toLowerCase();
+
+  // Assessment-criteria references like "(AC 1.3)" are metadata about the
+  // assignment brief, not part of the question's subject matter.
+  let cleaned = question.replace(/\([^)]*\)/g, " ");
+  for (const pattern of INSTRUCTION_LEAD_INS) {
+    cleaned = cleaned.replace(pattern, " ");
+  }
+  // A scenario organisation named mid-sentence ("...engagement at
+  // Portstride") is never itself something to find peer-reviewed evidence
+  // about, so it is dropped before word-casing destroys the capitalisation
+  // signal that identifies it as a proper noun.
+  cleaned = cleaned.replace(/\bat\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3}\b/g, " ");
+
+  const lower = cleaned.toLowerCase();
 
   let remainder = lower;
   for (const verb of COMMAND_VERBS) {
@@ -40,27 +78,35 @@ export function extractComponents(question: string): QuestionComponent[] {
   }
 
   for (const clause of clauses) {
-    const words = clause
-      .split(/\s+/)
-      .filter((w) => w.length > 2 && !STOPWORDS.has(w));
-    if (words.length === 0) continue;
+    // Split on list structure ("attraction, retention and engagement") so
+    // each item becomes its own concept instead of one phrase truncated
+    // partway through the list, which is what previously produced
+    // fragments like "impact demographic change shifting".
+    const segments = clause
+      .split(/,| and /)
+      .map((s) => s.trim())
+      .filter(Boolean);
 
-    // Group into short noun phrases (2-4 words) as core concepts rather than
-    // treating every remaining word as its own component.
-    const phrase = words.slice(0, 6).join(" ");
-    if (phrase.length < 4) continue;
+    for (const segment of segments) {
+      const words = segment
+        .split(/\s+/)
+        .map((w) => w.replace(/[,;:.]+$/, ""))
+        .filter((w) => w.length > 2 && !STOPWORDS.has(w));
+      if (words.length === 0) continue;
 
-    const label = phrase
-      .split(" ")
-      .slice(0, 4)
-      .join(" ");
+      // A safety cap for the rare segment that is still a long run-on
+      // phrase after list-splitting; genuine list items are almost always
+      // shorter than this.
+      const label = words.slice(0, 6).join(" ");
+      if (label.length < 4) continue;
 
-    components.push({
-      label,
-      type: "concept",
-      evidenceNeeded: "Established theory, conceptual literature and, where available, empirical studies.",
-      searchTerms: buildSearchTerms(label),
-    });
+      components.push({
+        label,
+        type: "concept",
+        evidenceNeeded: "Established theory, conceptual literature and, where available, empirical studies.",
+        searchTerms: buildSearchTerms(label),
+      });
+    }
   }
 
   // De-duplicate near-identical components.
@@ -72,7 +118,7 @@ export function extractComponents(question: string): QuestionComponent[] {
     return true;
   });
 
-  return deduped.slice(0, 6);
+  return deduped.slice(0, 8);
 }
 
 function buildSearchTerms(phrase: string): string[] {
