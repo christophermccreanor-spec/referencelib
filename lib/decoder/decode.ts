@@ -14,8 +14,18 @@ export function decodeQuestion(
   const components = extractComponents(trimmed);
   const profile = QUALIFICATION_PROFILES[qualificationProfileId] ?? QUALIFICATION_PROFILES.custom;
 
+  // One representative term per concept, not every synonym variant: the
+  // route layer only sends the first four searchTerms to OpenAlex, so
+  // flattening every component's full searchTerms array here risked that
+  // window filling up with two or three synonym spellings of the same
+  // concept and crowding out the question's other concepts entirely.
   const searchTerms = Array.from(
-    new Set(components.flatMap((c) => c.searchTerms).filter((t) => t.length > 2))
+    new Set(
+      components
+        .filter((c) => c.type === "concept")
+        .map((c) => c.searchTerms[0])
+        .filter((t): t is string => Boolean(t) && t.length > 2)
+    )
   );
 
   return {
