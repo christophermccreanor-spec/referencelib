@@ -3,27 +3,15 @@
 A low-cost, one-page research tool that helps students decode an assignment
 question against Bloom's taxonomy and command-verb analysis, find free
 peer-reviewed evidence through OpenAlex, Crossref and DOAJ, and generate
-Harvard or APA 7 citations. Built with Next.js 14 (App Router), TypeScript
-and Tailwind CSS.
+proper Harvard (Cite Them Right) or APA 7th edition citations. Built with
+Next.js 14 (App Router), TypeScript and Tailwind CSS.
 
-This build has been verified: `npm install`, `next build` and `next lint`
-all complete cleanly (confirmed 19 July 2026), and the same build has been
-deployed live and tested in production (confirmed 20 July 2026):
+Live at:
 
 https://www.referencelib.com
 
-The product was renamed from EvidenceBridge to ReferenceLib on 20 July 2026,
-to match the domain referencelib.com, which was attached and verified live
-with SSL the same day. The underlying Vercel project slug still says
-"evidencebridge" internally (kept as-is to avoid an unnecessary project
-migration); the site itself is fully on the custom domain now. The original
-https://evidencebridge.vercel.app URL still works and serves the same
-deployment.
-
-Pilot mode is on by default, so the site asks search engines not to index
-it and shows a "Private pilot" badge instead of the account and payment
-buttons. See `planning/04-go-live-checklist.md` for full deployment status
-and remaining steps.
+This repository is connected to Vercel for deployment. Every push to `main`
+builds and deploys automatically; there is no manual deploy step.
 
 ## What is built
 
@@ -33,23 +21,36 @@ and remaining steps.
 - Evidence search against OpenAlex, with peer-review status upgraded to
   "verified" via DOAJ, and DOI/title verification via Crossref. Preprints
   excluded by default.
-- Harvard and APA 7 citation formatting (template-based; see the note in
-  `lib/citation/format.ts` on the citeproc-js upgrade path noted in the
-  architecture document).
+- Real citation formatting via citeproc-js, using the official CSL styles
+  for Harvard (Cite Them Right) and APA 7th edition. These are the only
+  two styles supported; MLA, Vancouver and IEEE were deliberately removed
+  to keep the citation engine fast, reliable and low-token (see
+  `planning/05-deployment-plan.md`, section 2, for the reasoning).
+- Manual reference entry for books (with Google Books ISBN lookup),
+  websites, and government/organisational reports, all stored as CSL-JSON.
 - Local-only saved-reference list (browser local storage, no account, no
   server-side storage).
-- A stubbed Paystack checkout route for the R599/year full membership,
-  ready to activate once a Paystack plan code exists.
+- Word document export of a saved reference list (via the `docx` package),
+  replacing the earlier plain-text download.
+- Eight real footer pages: how verification works, pricing, methodology,
+  academic integrity, AI statement, privacy, terms, and contact. Four of
+  these (academic integrity, AI statement, privacy, terms) carry a visible
+  "first draft, pending review" badge until Christopher signs off on the
+  wording.
+- Footer links to Buy Me a Coffee (buymeacoffee.com/christopheu3) and the
+  Lovable funding page, plus a credit line for Dr Christopher Paul Andrew
+  McCreanor with an active LinkedIn link.
+- A stubbed Paystack checkout route for a future paid membership tier, not
+  yet activated.
 
 ## What is not built yet
 
-- The AI paragraph/claim-checking feature itself (the paid, GPT-4o mini
-  powered feature). The free tier's 5-checks-per-30-days limit has nowhere
-  to attach until this exists.
-- Any account or authentication system. The free tier's usage cap needs an
-  email-only account to enforce; this has not been built.
-- Full citeproc-js/CSL citation formatting. The current formatter is a
-  documented placeholder covering Harvard and APA 7 only.
+- The AI paragraph/claim-checking feature (a paid, AI-powered feature).
+- Any account or authentication system. Saved references are local to the
+  browser; a lightweight export/import file is the planned way to move a
+  reference list between devices, not yet built.
+- The R599/year Paystack plan itself (code is stubbed, no live plan code
+  configured).
 
 ## Setup
 
@@ -63,16 +64,17 @@ Fill in `.env.local`:
 - `CROSSREF_CONTACT_EMAIL` — your email, used for Crossref's polite pool.
   Free evidence search and citation verification work without this, but
   Crossref may rate-limit harder without it.
+- `GOOGLE_BOOKS_API_KEY` — optional, raises the Google Books rate limit for
+  ISBN lookups. Works without one at a lower shared limit.
+- `OPENALEX_API_KEY` — optional, free key from openalex.org/settings/api.
+  Raises the shared OpenAlex budget; the app works without one.
 - `CORE_API_KEY` — optional, only needed if the CORE supplementary source
   is switched on. Register free at core.ac.uk.
 - `PAYSTACK_SECRET_KEY` and `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY` — from your
-  Paystack dashboard. Needed only once the full-membership checkout is
-  switched on.
-- `PAYSTACK_PLAN_CODE` — the subscription plan code from Paystack, once
-  the R599/year plan has been created there.
+  Paystack dashboard. Needed only once a paid membership tier is switched
+  on.
 - `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` — optional, for
-  rate-limiting once the site is public. Not required for local
-  development or the private pilot.
+  rate-limiting once traffic grows. Not required for local development.
 
 Then run the development server:
 
@@ -96,28 +98,21 @@ they are dynamic by design.
 
 ## Deployment
 
-Live on Vercel Hobby (free tier), as the architecture document specified,
-at https://www.referencelib.com (referencelib.com apex redirects to www;
-SSL provisioned automatically by Vercel). Deployed directly from source, no
-Git repository required. To redeploy after a future code change, either
-connect this folder to a Git repository and push, or use `npx vercel --prod`
-from inside the folder once logged in with `npx vercel login`.
+Live on Vercel Hobby (free tier) at https://www.referencelib.com
+(referencelib.com apex redirects to www; SSL provisioned automatically by
+Vercel). This GitHub repository is connected to the `referencelib` Vercel
+project, so a push to `main` triggers an automatic build and deploy — no
+manual `vercel` commands needed.
 
-## Next steps before the CIPD pilot
+`package-lock.json` is committed but Vercel does not require it to build;
+`package.json` alone is sufficient. See `planning/05-deployment-plan.md`
+for the full, current deployment procedure.
 
-1. Select three real CIPD assignment questions for usability testing and
-   run them through the live decoder (still open, per the blueprint's
-   section 14).
-2. Register a CORE API key if the supplementary source is wanted (optional,
-   not required for pilot).
+## Full project history and reasoning
 
-## Deferred to public launch, not needed for the pilot
-
-3. Decide on live advertising (ad slots currently render nothing, by
-   design, while pilot mode is on).
-4. Create the R599/year subscription plan in the Paystack dashboard and
-   set `PAYSTACK_PLAN_CODE`.
-
-See `planning/02-blueprint.md`, `planning/01-architecture-and-cost-model.md`
-and `planning/03-pricing-and-ai-cost-model.md` in the parent folder for the
-full reasoning behind every decision in this build.
+See `planning/01-architecture-and-cost-model.md`,
+`planning/02-blueprint.md`, `planning/03-pricing-and-ai-cost-model.md`,
+`planning/04-go-live-checklist.md` and `planning/05-deployment-plan.md`
+in the parent folder for the full reasoning behind every decision in this
+build. Note: the `planning/` folder itself is not part of this repository
+(it lives one level up, alongside `referencelib/`, and is not deployed).
