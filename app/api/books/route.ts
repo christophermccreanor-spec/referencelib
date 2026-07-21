@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { lookupBookByIsbn } from "@/lib/sources/google-books";
+import { lookupBookByIsbn } from "@/lib/sources/open-library";
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     const isValidationError = message.startsWith("An ISBN is");
     console.error("[api/books]", error);
     return NextResponse.json(
-      { error: isValidationError ? message : "Could not reach Google Books. Please try again shortly, or enter the details manually." },
+      { error: isValidationError ? message : "Could not reach the book lookup service. Please try again shortly, or enter the details manually." },
       { status: isValidationError ? 400 : 502 }
     );
   }
