@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CitationRecord, ReferencingStyle, REFERENCING_STYLE_LABELS } from "@/lib/types";
 import { renderFullReference } from "@/lib/citation/csl/client";
 import {
@@ -37,6 +37,29 @@ export function ManualCitationForm({
 
   const fields = getFieldsForType(activeType);
   const sourceTypeLabel = MANUAL_SOURCE_TYPE_LABELS[activeType];
+
+  // This whole component only ever exists mounted while the dialog is
+  // open (app/page.tsx conditionally renders it), so mount-time is the
+  // right moment to move keyboard focus inside it. Without this, a
+  // keyboard or screen-reader user has no indication a dialog has
+  // appeared on top of the page (WCAG 2.4.3, 4.1.2). The container itself
+  // is the focus target, tabIndex=-1 so it is programmatically focusable
+  // without joining the normal tab order, since there is no single "first
+  // field" that makes sense across all three source types.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
+
+  // Escape closes the dialog like any standard modal, giving keyboard
+  // users a fast way out without hunting for the Cancel button.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onCancel();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onCancel]);
 
   function switchType(next: ManualSourceType) {
     setActiveType(next);
@@ -179,16 +202,30 @@ export function ManualCitationForm({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="grid max-h-[90vh] w-full max-w-2xl gap-4 overflow-y-auto rounded-xl bg-white p-5">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="manual-citation-heading"
+        tabIndex={-1}
+        className="grid max-h-[90vh] w-full max-w-2xl gap-4 overflow-y-auto rounded-xl bg-white p-5"
+      >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-medium">Cite a source</h2>
+            <h2 id="manual-citation-heading" className="text-base font-medium">
+              Cite a source
+            </h2>
             <div className="text-xs text-neutral-500">
               For sources you found yourself, not through the evidence search: a book, a website, or a
               government, CIPD or international-body report.
             </div>
           </div>
-          <button className="btn btn-ghost" onClick={onCancel} aria-label="Close">
+          {/* Visible text is "Cancel", not "Close": an aria-label here that
+              didn't match would leave a mismatch between what's on screen
+              and what's read out or matched by voice control (WCAG 2.5.3
+              Label in Name), so the accessible name is left to come from
+              the button's own text. */}
+          <button className="btn btn-ghost" onClick={onCancel}>
             Cancel
           </button>
         </div>
@@ -209,74 +246,77 @@ export function ManualCitationForm({
         <div className="grid gap-3">
           {fields.map((field) => (
             <div key={field.key} className="grid gap-1.5">
-            <label className="form-label">
-              {field.inputType !== "checkbox" && field.label}
-              {field.inputType !== "checkbox" && (
-                <div className="text-xs font-normal text-neutral-500">
-                  Where to find this: {field.guidance}
-                </div>
-              )}
-              {field.inputType === "checkbox" ? (
-                <span className="flex items-start gap-2 text-sm font-normal text-neutral-800">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={values.authorIsOrganisation}
-                    onChange={(e) => setField("authorIsOrganisation", e.target.checked)}
-                  />
-                  <span>
-                    {field.label}
-                    <span className="block text-xs text-neutral-500">{field.guidance}</span>
-                  </span>
-                </span>
-              ) : field.inputType === "date" ? (
-                <input
-                  type="date"
-                  className="form-control"
-                  value={values[field.key] as string}
-                  onChange={(e) => setField(field.key, e.target.value)}
-                />
-              ) : field.key === "authorText" ? (
-                <textarea
-                  className="form-control min-h-[70px]"
-                  placeholder={field.placeholder}
-                  value={values[field.key] as string}
-                  onChange={(e) => setField(field.key, e.target.value)}
-                />
-              ) : (
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder={field.placeholder}
-                  value={values[field.key] as string}
-                  onChange={(e) => setField(field.key, e.target.value)}
-                />
-              )}
-              {fieldErrors[field.key] && (
-                <div className="text-xs text-red-600">{fieldErrors[field.key]}</div>
-              )}
-            </label>
-            {activeType === "book" && field.key === "isbn" && (
-              <div className="grid gap-1.5">
-                <button
-                  type="button"
-                  className="btn justify-self-start"
-                  onClick={handleIsbnLookup}
-                  disabled={isbnLookupStatus === "loading"}
-                >
-                  {isbnLookupStatus === "loading" ? "Looking up..." : "Look up by ISBN"}
-                </button>
-                {isbnLookupMessage && (
-                  <div
-                    className={
-                      isbnLookupStatus === "error" ? "text-xs text-red-600" : "text-xs text-neutral-500"
-                    }
-                  >
-                    {isbnLookupMessage}
+              <label className="form-label">
+                {field.inputType !== "checkbox" && field.label}
+                {field.inputType !== "checkbox" && (
+                  <div className="text-xs font-normal text-neutral-500">
+                    Where to find this: {field.guidance}
                   </div>
                 )}
-              </div>
-            )}
+                {field.inputType === "checkbox" ? (
+                  <span className="flex items-start gap-2 text-sm font-normal text-neutral-800">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={values.authorIsOrganisation}
+                      onChange={(e) => setField("authorIsOrganisation", e.target.checked)}
+                    />
+                    <span>
+                      {field.label}
+                      <span className="block text-xs text-neutral-500">{field.guidance}</span>
+                    </span>
+                  </span>
+                ) : field.inputType === "date" ? (
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={values[field.key] as string}
+                    onChange={(e) => setField(field.key, e.target.value)}
+                  />
+                ) : field.key === "authorText" ? (
+                  <textarea
+                    className="form-control min-h-[70px]"
+                    placeholder={field.placeholder}
+                    value={values[field.key] as string}
+                    onChange={(e) => setField(field.key, e.target.value)}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder={field.placeholder}
+                    value={values[field.key] as string}
+                    onChange={(e) => setField(field.key, e.target.value)}
+                  />
+                )}
+                {fieldErrors[field.key] && (
+                  <div role="alert" className="text-xs text-red-600">
+                    {fieldErrors[field.key]}
+                  </div>
+                )}
+              </label>
+              {activeType === "book" && field.key === "isbn" && (
+                <div className="grid gap-1.5">
+                  <button
+                    type="button"
+                    className="btn justify-self-start"
+                    onClick={handleIsbnLookup}
+                    disabled={isbnLookupStatus === "loading"}
+                  >
+                    {isbnLookupStatus === "loading" ? "Looking up..." : "Look up by ISBN"}
+                  </button>
+                  {isbnLookupMessage && (
+                    <div
+                      role="status"
+                      className={
+                        isbnLookupStatus === "error" ? "text-xs text-red-600" : "text-xs text-neutral-500"
+                      }
+                    >
+                      {isbnLookupMessage}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -289,8 +329,8 @@ export function ManualCitationForm({
             {values.title.trim() === ""
               ? "Add a title to see how this reference will look."
               : previewLoading
-                ? "Rendering..."
-                : preview}
+              ? "Rendering..."
+              : preview}
           </div>
         </div>
 
@@ -311,11 +351,16 @@ export function ManualCitationForm({
 
       {missingQueue && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-          <div className="grid w-full max-w-md gap-3 rounded-xl bg-white p-5">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="missing-field-heading"
+            className="grid w-full max-w-md gap-3 rounded-xl bg-white p-5"
+          >
             <div className="text-xs font-medium text-neutral-500">
               Missing information ({missingIndex + 1} of {missingQueue.length})
             </div>
-            <h3 className="text-base font-medium">
+            <h3 id="missing-field-heading" className="text-base font-medium">
               We could not confirm the {missingQueue[missingIndex].label.toLowerCase()} for this{" "}
               {sourceTypeLabel.toLowerCase()}.
             </h3>
