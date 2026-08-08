@@ -46,6 +46,7 @@ export function EvidenceCard({
         {card.fullTextUrl && (
           <a href={card.fullTextUrl} target="_blank" rel="noreferrer" className="btn" onClick={onOpen}>
             Read free
+            <span className="sr-only"> (opens in a new tab)</span>
           </a>
         )}
         <button className="btn" onClick={onSave} disabled={saved || mustReadFirst}>
