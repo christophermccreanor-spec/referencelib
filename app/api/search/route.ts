@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchOpenAlex } from "@/lib/sources/openalex";
 import { isJournalInDOAJ } from "@/lib/sources/doaj";
 import { EvidenceCardData } from "@/lib/types";
+import { searchRateLimit, clientIp, getCached, setCached } from "@/lib/upstash";
 
 const CONTACT_EMAIL = process.env.CROSSREF_CONTACT_EMAIL || "christophermccreanor@gmail.com";
+
+interface SearchPayload {
+  results: EvidenceCardData[];
+  query: string;
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -14,8 +20,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "At least one search term is required." }, { status: 400 });
   }
 
+  // Per-IP rate limiting, architecture doc section 6. Fails open (no limiter
+  // object) when Upstash isn't configured, so local development and any
+  // outage of the free tier never breaks the search itself.
+  if (searchRateLimit) {
+    const ip = clientIp(req);
+    const { success, reset } = await searchRateLimit.limit(ip);
+    if (!success) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((reset - Date.now()) / 1000));
+      return NextResponse.json(
+        { error: "Too many searches in a short time. Please wait a moment and try again." },
+        { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
+      );
+    }
+  }
+
+  const query = terms.slice(0, 4).join(" ");
+  const cacheKey = `referencelib:search:${query.toLowerCase()}:${sinceYear ?? "any"}`;
+
+  const cached = await getCached<SearchPayload>(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached);
+  }
+
   try {
-    const query = terms.slice(0, 4).join(" ");
     const results = await searchOpenAlex(query, {
       perPage: 8,
       sinceYear,
@@ -37,7 +65,9 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    return NextResponse.json({ results: upgraded, query });
+    const payload: SearchPayload = { results: upgraded, query };
+    await setCached(cacheKey, payload);
+    return NextResponse.json(payload);
   } catch (error) {
     console.error("[api/search]", error);
     return NextResponse.json(
