@@ -42,19 +42,28 @@ const SORTED_VERBS = [...VERB_TABLE].sort((a, b) => b.verb.length - a.verb.lengt
 export function findCommandVerbs(question: string): CommandVerbMatch[] {
   const lower = question.toLowerCase();
   const matches: CommandVerbMatch[] = [];
-  const claimed = new Set<number>();
+  // Tracks the exact [start, end) character span each accepted match
+  // occupies. A candidate is only rejected when its own span genuinely
+  // overlaps one already claimed (e.g. "evaluate" sitting inside an already
+  // -claimed "critically evaluate"). This used to be a flat 30-character
+  // exclusion radius around each match's start index, which was meant to
+  // stop that same "evaluate" double-count but had the side effect of also
+  // suppressing entirely distinct verbs that happened to sit near each
+  // other, silently dropping "explain" from "Identify and explain the key
+  // drivers of motivation" because it started within 30 characters of
+  // "identify". Exact span overlap fixes both cases correctly.
+  const claimedRanges: [number, number][] = [];
 
   for (const def of SORTED_VERBS) {
     let searchFrom = 0;
     while (true) {
       const index = lower.indexOf(def.verb, searchFrom);
       if (index === -1) break;
-      const alreadyClaimed = [...claimed].some(
-        (c) => index < c + 30 && index + def.verb.length > c - 30
-      );
-      searchFrom = index + def.verb.length;
-      if (alreadyClaimed) continue;
-      claimed.add(index);
+      const end = index + def.verb.length;
+      searchFrom = end;
+      const overlaps = claimedRanges.some(([s, e]) => index < e && end > s);
+      if (overlaps) continue;
+      claimedRanges.push([index, end]);
       matches.push({
         verb: def.verb,
         bloomStages: def.bloomStages,
