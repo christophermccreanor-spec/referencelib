@@ -296,7 +296,7 @@ export default function Page() {
       <ProgressStrip activeIndex={savedRefs.length > 0 ? 3 : stepIndex} />
 
       <div className="grid gap-4 lg:grid-cols-[2fr_0.85fr] lg:items-start">
-        <main className="grid gap-4">
+        <main id="main-content" className="grid gap-4">
           <section className="panel">
             <div>
               <h2 className="text-base font-medium">{copy.heading}</h2>
@@ -393,9 +393,21 @@ export default function Page() {
               )}
               <span className="text-xs text-neutral-500">No account needed for evidence search or citations.</span>
             </div>
-            {decodeError && <div className="text-sm text-red-600">{decodeError}</div>}
-            {verifyError && <div className="text-sm text-red-600">{verifyError}</div>}
-            {paragraphError && <div className="text-sm text-red-600">{paragraphError}</div>}
+            {decodeError && (
+              <div role="alert" className="text-sm text-red-600">
+                {decodeError}
+              </div>
+            )}
+            {verifyError && (
+              <div role="alert" className="text-sm text-red-600">
+                {verifyError}
+              </div>
+            )}
+            {paragraphError && (
+              <div role="alert" className="text-sm text-red-600">
+                {paragraphError}
+              </div>
+            )}
           </section>
 
           {view === "audit" && auditResult && (
@@ -558,7 +570,11 @@ export default function Page() {
                   {searching ? "Searching..." : "Find free peer-reviewed evidence"}
                 </button>
               </div>
-              {searchError && <div className="text-sm text-red-600">{searchError}</div>}
+              {searchError && (
+                <div role="alert" className="text-sm text-red-600">
+                  {searchError}
+                </div>
+              )}
             </section>
           )}
 
