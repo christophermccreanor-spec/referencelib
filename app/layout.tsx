@@ -18,6 +18,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en-GB">
       <body>
+        {/* Hidden until it receives keyboard focus, then jumps a keyboard
+            or screen-reader user straight to #main-content, past the
+            header and tool tabs that repeat on every page (WCAG 2.4.1
+            Bypass Blocks). */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-neutral-900 focus:shadow-lg"
+        >
+          Skip to main content
+        </a>
         <div className="mx-auto max-w-6xl px-4 py-6">{children}</div>
       </body>
     </html>
