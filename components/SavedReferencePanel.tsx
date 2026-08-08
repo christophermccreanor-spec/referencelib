@@ -100,11 +100,26 @@ export function SavedReferencePanel({
               {ref.assignedTo && (
                 <span className="text-xs text-neutral-500">Assigned to: {ref.assignedTo}</span>
               )}
+              {/* Every card on this list repeats the same "Copy" / "Remove"
+                  labels, so a screen-reader user tabbing through several
+                  saved references would otherwise hear "Remove, button"
+                  over and over with no way to tell them apart. The
+                  aria-label names the specific reference each control
+                  acts on (WCAG 2.4.6 / 4.1.2) while the visible text stays
+                  short. */}
               <div className="flex gap-2">
-                <button className="btn btn-ghost" onClick={() => handleCopy(ref)}>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => handleCopy(ref)}
+                  aria-label={`Copy ${REFERENCING_STYLE_LABELS[style]} citation for ${ref.evidence.title}`}
+                >
                   Copy {REFERENCING_STYLE_LABELS[style]}
                 </button>
-                <button className="btn btn-ghost" onClick={() => onRemove(ref.id)}>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => onRemove(ref.id)}
+                  aria-label={`Remove ${ref.evidence.title} from saved references`}
+                >
                   Remove
                 </button>
               </div>
@@ -143,7 +158,7 @@ export function SavedReferencePanel({
             here.
           </div>
           {importMessage && (
-            <div className={`text-xs ${importMessage.isError ? "text-red-600" : "text-emerald-700"}`}>
+            <div role="status" className={`text-xs ${importMessage.isError ? "text-red-600" : "text-emerald-700"}`}>
               {importMessage.text}
             </div>
           )}
