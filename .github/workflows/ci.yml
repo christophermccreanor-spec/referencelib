@@ -1,0 +1,36 @@
+name: CI
+
+# Runs on every push and pull request against main so a broken commit shows
+# up as a red X on GitHub before it reaches a student, instead of only being
+# found by manual testing after deployment (which is how two real bugs
+# slipped through earlier: see lib/decoder/command-verbs.ts and
+# lib/citation/audit.ts). Vercel's own deploy already runs `next build`, but
+# it does not run the test suite or lint as a separate, visible gate, and a
+# failed Vercel deploy does not block main from accepting the commit.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm install
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Type check and build
+        run: npm run build
