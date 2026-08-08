@@ -45,8 +45,21 @@ function normaliseSurname(raw: string): string {
 const CITATION_SEGMENT =
   /([A-Z][A-Za-z'-]+)(?:\s+(?:and|&)\s+[A-Za-z'\-.\s]+|\s+et\s+al\.?)?,?\s*(\d{4}[a-z]?)/;
 
+// Narrative-style citation, e.g. "Smith (2020) argues that...", "Smith and
+// Jones (2020) found...", "Ahmed et al. (2019a) revisited...". Here the
+// surname sits outside the parentheses and only the year is inside, which
+// the parenthetical pattern above cannot see since it only looks at text
+// already inside a "(...)" pair. Found missing during test-suite build-out:
+// a citation-check tool that only reads "(Surname, Year)" and misses
+// "Surname (Year)" would flag every narrative citation in a normal essay as
+// unreferenced, which is not acceptable next to paid competitors that
+// handle both forms.
+const NARRATIVE_CITATION =
+  /\b([A-Z][A-Za-z'-]+)(?:\s+(?:and|&)\s+[A-Za-z'\-.\s]+|\s+et\s+al\.?)?\s*\((\d{4}[a-z]?)\)/g;
+
 function extractInTextCitations(text: string): ParsedCitation[] {
   const found: ParsedCitation[] = [];
+
   const parenRegex = /\(([^()]{4,200})\)/g;
   let match: RegExpExecArray | null;
   while ((match = parenRegex.exec(text)) !== null) {
@@ -58,6 +71,17 @@ function extractInTextCitations(text: string): ParsedCitation[] {
       }
     }
   }
+
+  let narrativeMatch: RegExpExecArray | null;
+  NARRATIVE_CITATION.lastIndex = 0;
+  while ((narrativeMatch = NARRATIVE_CITATION.exec(text)) !== null) {
+    found.push({
+      raw: narrativeMatch[0],
+      surname: normaliseSurname(narrativeMatch[1]),
+      year: narrativeMatch[2],
+    });
+  }
+
   return found;
 }
 
@@ -105,4 +129,3 @@ export function auditCitations(assignmentText: string, referenceListText: string
     uncitedReferences,
   };
 }
-
