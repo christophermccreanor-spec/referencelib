@@ -21,6 +21,7 @@ import {
 } from "@/lib/types";
 import { evidenceCardToCitationRecord } from "@/lib/citation/csl/adapter";
 import { renderFullReference } from "@/lib/citation/csl/client";
+import { auditCitations, CitationAuditResult } from "@/lib/citation/audit";
 import {
   addSavedReference,
   exportReferencesToFile,
@@ -52,8 +53,8 @@ const VIEW_COPY: Record<ToolView, { heading: string; help: string; placeholder: 
   },
   audit: {
     heading: "Check citations against your reference list",
-    help: "Paste assignment text and its reference list to find any citation with no matching reference.",
-    placeholder: "Paste assignment text and reference list here.",
+    help: "Paste your assignment text on the left and your reference list below it. This checks author-surname-and-year matching only, for Harvard and APA style citations, it does not read the whole document for you and two different authors sharing a surname and year will be treated as a match.",
+    placeholder: "Paste your assignment text here, including its in-text citations.",
     action: "Run citation check",
   },
 };
@@ -71,6 +72,17 @@ export default function Page() {
   const [results, setResults] = useState<EvidenceCardData[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  // Editable search terms: the student can see and correct what the
+  // decoder extracted before it is actually sent to the evidence search,
+  // per blueprint section 5 ("editable search concepts"). Pre-filled from
+  // the decoder's output but never forced, since the rule-based decoder
+  // will occasionally get a phrase wrong and there was previously no way
+  // for a student to fix that themselves.
+  const [searchTermsInput, setSearchTermsInput] = useState("");
+  const [sinceYear, setSinceYear] = useState("");
+
+  const [auditReferenceList, setAuditReferenceList] = useState("");
+  const [auditResult, setAuditResult] = useState<CitationAuditResult | null>(null);
 
   const [verifyResult, setVerifyResult] = useState<VerifyResponse | null>(null);
   const [verifying, setVerifying] = useState(false);
@@ -107,6 +119,10 @@ export default function Page() {
     setParagraphResults(null);
     setParagraphError(null);
     setOpenedIds(new Set());
+    setSearchTermsInput("");
+    setSinceYear("");
+    setAuditReferenceList("");
+    setAuditResult(null);
   }
 
   async function handleDecode() {
@@ -121,7 +137,9 @@ export default function Page() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not decode the question.");
-      setDecoded(data as DecodedQuestion);
+      const decodedQuestion = data as DecodedQuestion;
+      setDecoded(decodedQuestion);
+      setSearchTermsInput(decodedQuestion.searchTerms.join(", "));
     } catch (error) {
       setDecodeError(error instanceof Error ? error.message : "Something went wrong.");
     } finally {
@@ -134,10 +152,23 @@ export default function Page() {
     setSearching(true);
     setSearchError(null);
     try {
+      const editedTerms = searchTermsInput
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      const terms = editedTerms.length
+        ? editedTerms
+        : decoded.searchTerms.length
+        ? decoded.searchTerms
+        : [decoded.question];
+      const parsedYear = Number(sinceYear);
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ terms: decoded.searchTerms.length ? decoded.searchTerms : [decoded.question] }),
+        body: JSON.stringify({
+          terms,
+          sinceYear: sinceYear.trim() && Number.isFinite(parsedYear) ? parsedYear : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Search failed.");
@@ -191,6 +222,10 @@ export default function Page() {
     } finally {
       setParagraphSearching(false);
     }
+  }
+
+  function handleAuditCitations() {
+    setAuditResult(auditCitations(input, auditReferenceList));
   }
 
   function handleOpenReference(id: string) {
@@ -268,15 +303,26 @@ export default function Page() {
               <div className="text-xs text-neutral-500">{copy.help}</div>
             </div>
             <label className="form-label">
-              Assignment question
+              {view === "audit" ? "Assignment text" : "Assignment question"}
               <textarea
                 className="form-control min-h-[100px]"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
               />
             </label>
+            {view === "audit" && (
+              <label className="form-label">
+                Reference list
+                <textarea
+                  className="form-control min-h-[100px]"
+                  value={auditReferenceList}
+                  onChange={(e) => setAuditReferenceList(e.target.value)}
+                  placeholder="Paste your reference list here, one reference per line."
+                />
+              </label>
+            )}
             {view === "question" && (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <label className="form-label">
                   Qualification level
                   <select
@@ -307,6 +353,17 @@ export default function Page() {
                     ))}
                   </select>
                 </label>
+                <label className="form-label">
+                  Evidence from year (optional)
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    className="form-control"
+                    placeholder="e.g. 2018"
+                    value={sinceYear}
+                    onChange={(e) => setSinceYear(e.target.value)}
+                  />
+                </label>
               </div>
             )}
             <div className="flex items-center gap-3">
@@ -325,18 +382,60 @@ export default function Page() {
                   {paragraphSearching ? "Searching..." : copy.action}
                 </button>
               )}
+              {view === "audit" && (
+                <button
+                  className="btn btn-primary"
+                  onClick={handleAuditCitations}
+                  disabled={!input.trim() || !auditReferenceList.trim()}
+                >
+                  {copy.action}
+                </button>
+              )}
               <span className="text-xs text-neutral-500">No account needed for evidence search or citations.</span>
             </div>
             {decodeError && <div className="text-sm text-red-600">{decodeError}</div>}
             {verifyError && <div className="text-sm text-red-600">{verifyError}</div>}
             {paragraphError && <div className="text-sm text-red-600">{paragraphError}</div>}
-            {view === "audit" && (
-              <div className="text-sm text-neutral-500">
-                This mode is on the build roadmap. Find evidence, Verify a reference, and Evidence my paragraph
-                are fully working now.
-              </div>
-            )}
           </section>
+
+          {view === "audit" && auditResult && (
+            <section className="panel">
+              <h2 className="text-base font-medium">Citation check results</h2>
+              <div className="text-xs text-neutral-500">
+                Found {auditResult.citationCount} in-text citation{auditResult.citationCount === 1 ? "" : "s"} and{" "}
+                {auditResult.referenceCount} reference{auditResult.referenceCount === 1 ? "" : "s"}, with{" "}
+                {auditResult.matchedCount} matched by author surname and year.
+              </div>
+              {auditResult.unreferencedCitations.length === 0 && auditResult.uncitedReferences.length === 0 && (
+                <div className="text-sm text-emerald-700">
+                  Every in-text citation found a matching reference, and every reference found a matching
+                  citation.
+                </div>
+              )}
+              {auditResult.unreferencedCitations.length > 0 && (
+                <div className="grid gap-1.5">
+                  <strong className="text-sm">
+                    Cited in the text but not found in your reference list
+                  </strong>
+                  {auditResult.unreferencedCitations.map((c, i) => (
+                    <div key={i} className="text-sm text-neutral-700">
+                      ({c})
+                    </div>
+                  ))}
+                </div>
+              )}
+              {auditResult.uncitedReferences.length > 0 && (
+                <div className="grid gap-1.5">
+                  <strong className="text-sm">In your reference list but not cited in the text</strong>
+                  {auditResult.uncitedReferences.map((r, i) => (
+                    <div key={i} className="text-sm text-neutral-700">
+                      {r}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           {view === "paragraph" && paragraphResults && (
             <section className="panel">
@@ -446,6 +545,14 @@ export default function Page() {
                     .join(" ")}
                 </div>
               )}
+              <label className="form-label">
+                Search terms (edit these if they look wrong before searching)
+                <input
+                  className="form-control"
+                  value={searchTermsInput}
+                  onChange={(e) => setSearchTermsInput(e.target.value)}
+                />
+              </label>
               <div className="flex items-center gap-3">
                 <button className="btn btn-primary" onClick={handleSearch} disabled={searching}>
                   {searching ? "Searching..." : "Find free peer-reviewed evidence"}
