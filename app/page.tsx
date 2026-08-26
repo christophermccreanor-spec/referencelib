@@ -292,6 +292,11 @@ export default function Page() {
   return (
     <div>
       <Header savedCount={savedRefs.length} />
+      <p className="mb-4 max-w-2xl text-sm text-neutral-700">
+        Free evidence search and Harvard/APA referencing built for CIPD assignments, so you spend less time
+        chasing paywalled journals and more time writing. Evidence is sourced live from OpenAlex, Crossref
+        and DOAJ: open-access, peer-reviewed literature only.
+      </p>
       <ToolTabs active={view} onChange={switchView} />
       <ProgressStrip activeIndex={savedRefs.length > 0 ? 3 : stepIndex} />
 
