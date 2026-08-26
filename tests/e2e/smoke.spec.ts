@@ -116,10 +116,16 @@ test.describe("Welcome tour", () => {
 async function addManualBookCitation(page: Page, title: string) {
   await page.getByRole("button", { name: "+ Cite a source manually" }).click();
   const dialog = page.getByRole("dialog", { name: "Cite a source" });
-  await dialog.getByLabel("Title", { exact: false }).fill(title);
-  await dialog.getByLabel("Author(s) or organisation", { exact: false }).fill("Smith, J.");
-  await dialog.getByLabel("Year of publication", { exact: false }).fill("2023");
-  await dialog.getByLabel("Publisher", { exact: false }).fill("Kogan Page");
+  // Each field's accessible name is its label text immediately followed by
+  // its own "Where to find this: ..." guidance, with no separator, since
+  // ManualCitationForm.tsx nests the guidance text inside the same <label>
+  // as the input. A plain substring match on "Title" also matches the
+  // Edition field, whose guidance mentions "the title page", so these are
+  // anchored to the start of the name instead to pick out the right field.
+  await dialog.getByLabel(/^Title/).fill(title);
+  await dialog.getByLabel(/^Author\(s\) or organisation/).fill("Smith, J.");
+  await dialog.getByLabel(/^Year of publication/).fill("2023");
+  await dialog.getByLabel(/^Publisher/).fill("Kogan Page");
   await dialog.getByRole("button", { name: "Add source" }).click();
   await expect(dialog).toHaveCount(0);
 }
