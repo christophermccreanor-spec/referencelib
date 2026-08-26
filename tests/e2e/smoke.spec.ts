@@ -144,7 +144,7 @@ test.describe("Project switcher", () => {
     await page.goto("/");
 
     await addManualBookCitation(page, "Organisational Culture and Change");
-    await expect(page.getByText("1 saved")).toBeVisible();
+    await expect(page.getByText("1 saved", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "+ New project" }).click();
     await page.getByPlaceholder("e.g. CIPD Level 7: Employee Wellbeing").fill("Second module");
@@ -152,11 +152,11 @@ test.describe("Project switcher", () => {
 
     // A freshly created project must start empty, and must not show the
     // first project's reference.
-    await expect(page.getByText("0 saved")).toBeVisible();
+    await expect(page.getByText("0 saved", { exact: true })).toBeVisible();
     await expect(page.getByText("Organisational Culture and Change")).toHaveCount(0);
 
     await addManualBookCitation(page, "Reward Management in Practice");
-    await expect(page.getByText("1 saved")).toBeVisible();
+    await expect(page.getByText("1 saved", { exact: true })).toBeVisible();
 
     // Switch back to the first (now second-most-recently-touched) project
     // in the list and confirm its own reference is back, and the second
@@ -164,7 +164,7 @@ test.describe("Project switcher", () => {
     await page.getByLabel("Switch project").selectOption({ index: 1 });
     await expect(page.getByText("Organisational Culture and Change")).toBeVisible();
     await expect(page.getByText("Reward Management in Practice")).toHaveCount(0);
-    await expect(page.getByText("1 saved")).toBeVisible();
+    await expect(page.getByText("1 saved", { exact: true })).toBeVisible();
   });
 
   test("deleting a project falls back to a remaining one and hides the delete control", async ({ page }) => {
