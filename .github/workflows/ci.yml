@@ -39,3 +39,39 @@ jobs:
 
       - name: Type check and build
         run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    # Runs alongside the unit test job (not after it) so a broken e2e test
+    # never delays the fast unit/lint feedback. A handful of real-browser
+    # smoke checks: homepage loads correctly, the Find evidence flow works
+    # end to end, every tool tab switches cleanly, and the manual citation
+    # dialog opens. Added 26 August 2026 after a homepage change (value
+    # proposition line, ad slot text fix) had to be checked by hand because
+    # nothing automated covered actual browser rendering or click-through.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm install --legacy-peer-deps
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Build
+        run: npm run build
+
+      - name: End-to-end smoke tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
