@@ -30,6 +30,194 @@ export function markIntroSeen(): void {
   }
 }
 
+// --- Multi-project support -------------------------------------------------
+//
+// Added so a student juggling more than one module or research task in the
+// same browser does not overwrite one assignment's saved references with
+// another's. Still entirely local storage, no account, no server: a browser
+// now holds several named "projects", each with its own saved-reference
+// list, and one of them is marked active at a time. Everything below this
+// point (loadSavedReferences, saveSavedReferences, loadProjectName,
+// saveProjectName) reads and writes whichever project is currently active,
+// so existing call sites elsewhere in the app did not need to change.
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  referenceCount: number;
+  updatedAt: string;
+}
+
+interface ProjectIndexEntry {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const PROJECTS_INDEX_KEY = "referencelib:projects";
+const ACTIVE_PROJECT_KEY = "referencelib:active-project";
+
+function projectReferencesKey(id: string): string {
+  return `referencelib:project:${id}:references`;
+}
+
+function generateProjectId(): string {
+  return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function readProjectIndex(): ProjectIndexEntry[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(PROJECTS_INDEX_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as ProjectIndexEntry[];
+  } catch {
+    return null;
+  }
+}
+
+function writeProjectIndex(index: ProjectIndexEntry[]): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PROJECTS_INDEX_KEY, JSON.stringify(index));
+}
+
+// Moves a student who used ReferenceLib before multi-project support
+// existed (a single reference list under STORAGE_KEY, one project name
+// under PROJECT_KEY) into the new model as their first project, with zero
+// loss: their saved references and project name both carry over exactly
+// as they were. Runs at most once per browser: after this, the presence
+// of PROJECTS_INDEX_KEY is what every other function checks, so a second
+// call is always a no-op, even for a brand new browser with nothing to
+// migrate.
+function ensureMigrated(): ProjectIndexEntry[] {
+  const existing = readProjectIndex();
+  if (existing) return existing;
+  if (typeof window === "undefined") return [];
+
+  let legacyRefs: SavedReference[] = [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (raw) legacyRefs = JSON.parse(raw) as SavedReference[];
+  } catch {
+    legacyRefs = [];
+  }
+  const legacyName = window.localStorage.getItem(PROJECT_KEY) ?? "My assignment";
+
+  const id = generateProjectId();
+  const now = new Date().toISOString();
+  const index: ProjectIndexEntry[] = [{ id, name: legacyName, createdAt: now, updatedAt: now }];
+
+  window.localStorage.setItem(projectReferencesKey(id), JSON.stringify(legacyRefs));
+  writeProjectIndex(index);
+  window.localStorage.setItem(ACTIVE_PROJECT_KEY, id);
+
+  return index;
+}
+
+export function getActiveProjectId(): string {
+  if (typeof window === "undefined") return "";
+  const index = ensureMigrated();
+  const stored = window.localStorage.getItem(ACTIVE_PROJECT_KEY);
+  if (stored && index.some((p) => p.id === stored)) return stored;
+  // Active pointer missing or stale (its project was deleted, or this is
+  // the very first load): fall back to the first project rather than
+  // leaving the app pointed at nothing.
+  const fallback = index[0]?.id ?? "";
+  if (fallback) window.localStorage.setItem(ACTIVE_PROJECT_KEY, fallback);
+  return fallback;
+}
+
+export function setActiveProjectId(id: string): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(ACTIVE_PROJECT_KEY, id);
+}
+
+export function listProjects(): ProjectSummary[] {
+  if (typeof window === "undefined") return [];
+  const index = ensureMigrated();
+  return index
+    .map((entry) => {
+      let count = 0;
+      try {
+        const raw = window.localStorage.getItem(projectReferencesKey(entry.id));
+        count = raw ? (JSON.parse(raw) as SavedReference[]).length : 0;
+      } catch {
+        count = 0;
+      }
+      return { id: entry.id, name: entry.name, referenceCount: count, updatedAt: entry.updatedAt };
+    })
+    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+}
+
+export function createProject(name: string): string {
+  const index = ensureMigrated();
+  const id = generateProjectId();
+  const now = new Date().toISOString();
+  const trimmed = name.trim() || "New project";
+  writeProjectIndex([...index, { id, name: trimmed, createdAt: now, updatedAt: now }]);
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(projectReferencesKey(id), JSON.stringify([]));
+    window.localStorage.setItem(ACTIVE_PROJECT_KEY, id);
+  }
+  return id;
+}
+
+function renameActiveProject(name: string): void {
+  const index = ensureMigrated();
+  const activeId = getActiveProjectId();
+  const trimmed = name.trim() || "My assignment";
+  const next = index.map((p) =>
+    p.id === activeId ? { ...p, name: trimmed, updatedAt: new Date().toISOString() } : p
+  );
+  writeProjectIndex(next);
+}
+
+// Deleting the project a student is currently looking at must never leave
+// the app pointed at a project that no longer exists: this switches to
+// whichever project is now first in the list, or creates one fresh empty
+// project if that was the very last one, so the app is never left with
+// zero projects to show.
+export function deleteProject(id: string): string {
+  const index = ensureMigrated();
+  const remaining = index.filter((p) => p.id !== id);
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(projectReferencesKey(id));
+  }
+
+  if (remaining.length === 0) {
+    const now = new Date().toISOString();
+    const newId = generateProjectId();
+    writeProjectIndex([{ id: newId, name: "My assignment", createdAt: now, updatedAt: now }]);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(projectReferencesKey(newId), JSON.stringify([]));
+      window.localStorage.setItem(ACTIVE_PROJECT_KEY, newId);
+    }
+    return newId;
+  }
+
+  writeProjectIndex(remaining);
+  const activeId = getActiveProjectId();
+  if (activeId === id || !remaining.some((p) => p.id === activeId)) {
+    const fallback = remaining[0].id;
+    if (typeof window !== "undefined") window.localStorage.setItem(ACTIVE_PROJECT_KEY, fallback);
+    return fallback;
+  }
+  return activeId;
+}
+
+function touchActiveProjectUpdatedAt(): void {
+  if (typeof window === "undefined") return;
+  const index = readProjectIndex();
+  if (!index) return;
+  const activeId = window.localStorage.getItem(ACTIVE_PROJECT_KEY);
+  if (!activeId) return;
+  writeProjectIndex(
+    index.map((p) => (p.id === activeId ? { ...p, updatedAt: new Date().toISOString() } : p))
+  );
+}
+
+// --- End multi-project support ---------------------------------------------
+
 // Converts any reference saved under the pre-task-#38 data model (evidence
 // stored as a plain EvidenceCardData, with `authors: string[]` and no CSL
 // `author` field) into the current CitationRecord shape, in place, on load.
@@ -43,7 +231,9 @@ function migrateLegacyReference(ref: SavedReference): SavedReference {
 export function loadSavedReferences(): SavedReference[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const id = getActiveProjectId();
+    if (!id) return [];
+    const raw = window.localStorage.getItem(projectReferencesKey(id));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as SavedReference[];
     const migrated = parsed.map(migrateLegacyReference);
@@ -60,7 +250,10 @@ export function loadSavedReferences(): SavedReference[] {
 
 export function saveSavedReferences(refs: SavedReference[]): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(refs));
+  const id = getActiveProjectId();
+  if (!id) return;
+  window.localStorage.setItem(projectReferencesKey(id), JSON.stringify(refs));
+  touchActiveProjectUpdatedAt();
 }
 
 export function addSavedReference(evidence: CitationRecord, assignedTo: string | null): SavedReference[] {
@@ -82,18 +275,20 @@ export function removeSavedReference(id: string): SavedReference[] {
 
 export function loadProjectName(): string {
   if (typeof window === "undefined") return "My assignment";
-  return window.localStorage.getItem(PROJECT_KEY) ?? "My assignment";
+  const index = ensureMigrated();
+  const id = getActiveProjectId();
+  return index.find((p) => p.id === id)?.name ?? "My assignment";
 }
 
 export function saveProjectName(name: string): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(PROJECT_KEY, name);
+  renameActiveProject(name);
 }
 
 // Lightweight file-based portability, in place of an account system (see
 // README, "What is not built yet"): a saved-reference list lives only in
 // this browser's local storage, so moving it to another device or browser
 // means exporting it to a file here and importing that same file there.
+// Export/import both operate on the active project only.
 
 interface ExportedReferenceFile {
   version: 1;
