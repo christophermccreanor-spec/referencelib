@@ -1,12 +1,18 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { REFERENCING_STYLE_LABELS, ReferencingStyle, SavedReference } from "@/lib/types";
 import { renderBibliographyEntries, renderInTextCitationForItem } from "@/lib/citation/csl/client";
+import { ProjectSummary } from "@/lib/storage/local-references";
 import { AdSlot } from "@/components/AdSlot";
 
 export function SavedReferencePanel({
   refs,
   projectName,
   onProjectNameChange,
+  projects,
+  activeProjectId,
+  onSwitchProject,
+  onCreateProject,
+  onDeleteProject,
   style,
   onStyleChange,
   onRemove,
@@ -19,6 +25,11 @@ export function SavedReferencePanel({
   refs: SavedReference[];
   projectName: string;
   onProjectNameChange: (name: string) => void;
+  projects: ProjectSummary[];
+  activeProjectId: string;
+  onSwitchProject: (id: string) => void;
+  onCreateProject: (name: string) => void;
+  onDeleteProject: () => void;
   style: ReferencingStyle;
   onStyleChange: (style: ReferencingStyle) => void;
   onRemove: (id: string) => void;
@@ -29,6 +40,8 @@ export function SavedReferencePanel({
   onOpenManualEntry: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [addingProject, setAddingProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
 
   function handleFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -47,6 +60,13 @@ export function SavedReferencePanel({
     }
   }
 
+  function handleCreateProject() {
+    if (!newProjectName.trim()) return;
+    onCreateProject(newProjectName);
+    setNewProjectName("");
+    setAddingProject(false);
+  }
+
   return (
     <aside className="grid gap-3">
       <section className="panel">
@@ -63,14 +83,70 @@ export function SavedReferencePanel({
           For a book, website, or government/CIPD/international-body report you found yourself.
         </div>
 
-        <label className="form-label">
-          Project name
-          <input
-            className="form-control"
-            value={projectName}
-            onChange={(e) => onProjectNameChange(e.target.value)}
-          />
-        </label>
+        <div className="grid gap-1.5 border-b border-neutral-200 pb-3">
+          <label className="form-label">
+            Switch project
+            <select
+              className="form-control"
+              value={activeProjectId}
+              onChange={(e) => onSwitchProject(e.target.value)}
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.referenceCount} saved)
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="text-xs text-neutral-500">
+            Each project keeps its own separate saved references, so different modules or
+            assignments never mix.
+          </div>
+
+          {!addingProject ? (
+            <div className="flex gap-2">
+              <button className="btn btn-ghost" onClick={() => setAddingProject(true)}>
+                + New project
+              </button>
+              {projects.length > 1 && (
+                <button className="btn btn-ghost" onClick={onDeleteProject}>
+                  Delete this project
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                className="form-control"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                placeholder="e.g. CIPD Level 7: Employee Wellbeing"
+                autoFocus
+              />
+              <button className="btn btn-primary" onClick={handleCreateProject} disabled={!newProjectName.trim()}>
+                Create
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  setAddingProject(false);
+                  setNewProjectName("");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
+          <label className="form-label">
+            Rename this project
+            <input
+              className="form-control"
+              value={projectName}
+              onChange={(e) => onProjectNameChange(e.target.value)}
+            />
+          </label>
+        </div>
 
         <label className="form-label">
           Reference list style
@@ -136,7 +212,7 @@ export function SavedReferencePanel({
         </div>
 
         <div className="grid gap-1.5 border-t border-neutral-200 pt-3">
-          <span className="text-xs font-medium text-neutral-700">Move to another device</span>
+          <span className="text-xs font-medium text-neutral-700">Move this project to another device</span>
           <div className="flex gap-2">
             <button className="btn btn-ghost" onClick={onExportJson} disabled={refs.length === 0}>
               Export references
@@ -153,9 +229,9 @@ export function SavedReferencePanel({
             />
           </div>
           <div className="text-xs text-neutral-500">
-            Export saves a file you can bring into ReferenceLib on another device or browser.
-            Importing only adds references, it never removes or overwrites what is already saved
-            here.
+            Export saves a file for the project shown above, to bring into ReferenceLib on another
+            device or browser. Importing only adds references to the current project, it never
+            removes or overwrites what is already saved here.
           </div>
           {importMessage && (
             <div role="status" className={`text-xs ${importMessage.isError ? "text-red-600" : "text-emerald-700"}`}>
