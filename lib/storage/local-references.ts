@@ -6,6 +6,29 @@ import { evidenceCardToCitationRecord, isLegacyEvidenceCard } from "@/lib/citati
 // for search, saving and citations.
 const STORAGE_KEY = "referencelib:saved-references";
 const PROJECT_KEY = "referencelib:project-name";
+const INTRO_SEEN_KEY = "referencelib:seen-intro";
+
+// Gates the first-visit welcome tour (components/WelcomeTour.tsx) so it
+// shows once per browser, not on every visit. Fails open (treated as
+// "already seen") if storage is unavailable, since a broken tour flag
+// must never trap a returning student behind the tour every time.
+export function hasSeenIntro(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return window.localStorage.getItem(INTRO_SEEN_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+
+export function markIntroSeen(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(INTRO_SEEN_KEY, "1");
+  } catch {
+    // Ignore: worst case the tour reappears next visit, which is harmless.
+  }
+}
 
 // Converts any reference saved under the pre-task-#38 data model (evidence
 // stored as a plain EvidenceCardData, with `authors: string[]` and no CSL
