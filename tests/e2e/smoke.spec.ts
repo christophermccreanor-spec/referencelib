@@ -112,3 +112,76 @@ test.describe("Welcome tour", () => {
     await expect(page.getByRole("dialog", { name: "How ReferenceLib works" })).toBeVisible();
   });
 });
+
+async function addManualBookCitation(page: Page, title: string) {
+  await page.getByRole("button", { name: "+ Cite a source manually" }).click();
+  const dialog = page.getByRole("dialog", { name: "Cite a source" });
+  await dialog.getByLabel("Title", { exact: false }).fill(title);
+  await dialog.getByLabel("Author(s) or organisation", { exact: false }).fill("Smith, J.");
+  await dialog.getByLabel("Year of publication", { exact: false }).fill("2023");
+  await dialog.getByLabel("Publisher", { exact: false }).fill("Kogan Page");
+  await dialog.getByRole("button", { name: "Add source" }).click();
+  await expect(dialog).toHaveCount(0);
+}
+
+test.describe("Project switcher", () => {
+  // Added alongside the multi-project storage layer (task #78-83): a
+  // student juggling more than one module or assignment now gets a
+  // separate saved-reference list per project, switchable from a
+  // dropdown in the references panel. This is the one flow a unit test
+  // cannot cover on its own, since it depends on real React state and
+  // real DOM re-rendering across a project switch, not just what ends up
+  // in local storage.
+  test.beforeEach(async ({ page }) => skipWelcomeTour(page));
+
+  test("keeps different projects' saved references separate", async ({ page }) => {
+    await page.goto("/");
+
+    await addManualBookCitation(page, "Organisational Culture and Change");
+    await expect(page.getByText("1 saved")).toBeVisible();
+
+    await page.getByRole("button", { name: "+ New project" }).click();
+    await page.getByPlaceholder("e.g. CIPD Level 7: Employee Wellbeing").fill("Second module");
+    await page.getByRole("button", { name: "Create" }).click();
+
+    // A freshly created project must start empty, and must not show the
+    // first project's reference.
+    await expect(page.getByText("0 saved")).toBeVisible();
+    await expect(page.getByText("Organisational Culture and Change")).toHaveCount(0);
+
+    await addManualBookCitation(page, "Reward Management in Practice");
+    await expect(page.getByText("1 saved")).toBeVisible();
+
+    // Switch back to the first (now second-most-recently-touched) project
+    // in the list and confirm its own reference is back, and the second
+    // project's reference is not visible here.
+    await page.getByLabel("Switch project").selectOption({ index: 1 });
+    await expect(page.getByText("Organisational Culture and Change")).toBeVisible();
+    await expect(page.getByText("Reward Management in Practice")).toHaveCount(0);
+    await expect(page.getByText("1 saved")).toBeVisible();
+  });
+
+  test("deleting a project falls back to a remaining one and hides the delete control", async ({ page }) => {
+    // The "Delete this project" control only ever renders once a second
+    // project exists (SavedReferencePanel.tsx), so a student can never
+    // reach a zero-projects state through the UI. The pathological "this
+    // was the last project" fallback itself is covered directly in
+    // tests/storage/local-references.test.ts; this test covers the
+    // reachable UI path only.
+    page.on("dialog", (dialog) => dialog.accept());
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: "Delete this project" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "+ New project" }).click();
+    await page.getByPlaceholder("e.g. CIPD Level 7: Employee Wellbeing").fill("Temporary project");
+    await page.getByRole("button", { name: "Create" }).click();
+    await expect(page.getByRole("button", { name: "Delete this project" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Delete this project" }).click();
+    // Deleting back down to one project removes the delete button again
+    // (it only shows when there is more than one project to fall back
+    // to), and the app must still show a working, usable project.
+    await expect(page.getByRole("button", { name: "Delete this project" })).toHaveCount(0);
+    await expect(page.getByLabel("Switch project")).toBeVisible();
+  });
+});
