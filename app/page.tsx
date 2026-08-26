@@ -25,14 +25,20 @@ import { renderFullReference } from "@/lib/citation/csl/client";
 import { auditCitations, CitationAuditResult } from "@/lib/citation/audit";
 import {
   addSavedReference,
+  createProject,
+  deleteProject,
   exportReferencesToFile,
+  getActiveProjectId,
   hasSeenIntro,
   importReferencesFromJson,
+  listProjects,
   loadProjectName,
   loadSavedReferences,
   markIntroSeen,
+  ProjectSummary,
   removeSavedReference,
   saveProjectName,
+  setActiveProjectId,
 } from "@/lib/storage/local-references";
 
 const VIEW_COPY: Record<ToolView, { heading: string; help: string; placeholder: string; action: string }> = {
@@ -102,13 +108,26 @@ export default function Page() {
 
   const [savedRefs, setSavedRefs] = useState<SavedReference[]>([]);
   const [projectName, setProjectName] = useState("My assignment");
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [activeProjectId, setActiveProjectIdState] = useState("");
   const [manualEntryOpen, setManualEntryOpen] = useState(false);
   const [importMessage, setImportMessage] = useState<{ text: string; isError: boolean } | null>(null);
   const [showTour, setShowTour] = useState(false);
 
-  useEffect(() => {
+  // Re-reads the active project's own saved references, name and the
+  // project list itself. Called after every action that can change which
+  // project is active or what is inside it (switching, creating, deleting,
+  // renaming, saving, removing, importing), so the project dropdown and
+  // its "(n saved)" counts never go stale against what is actually stored.
+  function refreshProjectState() {
+    setProjects(listProjects());
+    setActiveProjectIdState(getActiveProjectId());
     setSavedRefs(loadSavedReferences());
     setProjectName(loadProjectName());
+  }
+
+  useEffect(() => {
+    refreshProjectState();
     if (!hasSeenIntro()) setShowTour(true);
   }, []);
 
@@ -252,6 +271,7 @@ export default function Page() {
       decoded?.components[0]?.label ?? null
     );
     setSavedRefs(next);
+    setProjects(listProjects());
   }
 
   async function handleCopyCitation(card: EvidenceCardData) {
@@ -266,17 +286,42 @@ export default function Page() {
 
   function handleRemove(id: string) {
     setSavedRefs(removeSavedReference(id));
+    setProjects(listProjects());
   }
 
   function handleAddManualCitation(record: CitationRecord) {
     const next = addSavedReference(record, decoded?.components[0]?.label ?? null);
     setSavedRefs(next);
+    setProjects(listProjects());
     setManualEntryOpen(false);
   }
 
   function handleProjectNameChange(name: string) {
     setProjectName(name);
     saveProjectName(name);
+    setProjects(listProjects());
+  }
+
+  function handleSwitchProject(id: string) {
+    setActiveProjectId(id);
+    refreshProjectState();
+  }
+
+  function handleCreateProject(name: string) {
+    createProject(name);
+    refreshProjectState();
+  }
+
+  function handleDeleteActiveProject() {
+    const active = projects.find((p) => p.id === activeProjectId);
+    const name = active ? `"${active.name}"` : "this project";
+    const count = active?.referenceCount ?? 0;
+    const confirmed = window.confirm(
+      `Delete ${name} and its ${count} saved reference${count === 1 ? "" : "s"}? This cannot be undone. Export first if you want to keep a copy.`
+    );
+    if (!confirmed) return;
+    deleteProject(activeProjectId);
+    refreshProjectState();
   }
 
   function handleImportFile(file: File) {
@@ -285,6 +330,7 @@ export default function Page() {
       const raw = typeof reader.result === "string" ? reader.result : "";
       const result = importReferencesFromJson(raw, savedRefs);
       setSavedRefs(result.merged);
+      setProjects(listProjects());
       if (result.error) {
         setImportMessage({ text: result.error, isError: true });
       } else {
@@ -625,6 +671,11 @@ export default function Page() {
           refs={savedRefs}
           projectName={projectName}
           onProjectNameChange={handleProjectNameChange}
+          projects={projects}
+          activeProjectId={activeProjectId}
+          onSwitchProject={handleSwitchProject}
+          onCreateProject={handleCreateProject}
+          onDeleteProject={handleDeleteActiveProject}
           style={style}
           onStyleChange={setStyle}
           onRemove={handleRemove}
