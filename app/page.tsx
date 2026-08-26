@@ -9,6 +9,7 @@ import { AdSlot } from "@/components/AdSlot";
 import { EvidenceCard } from "@/components/EvidenceCard";
 import { SavedReferencePanel, exportReferenceList } from "@/components/SavedReferencePanel";
 import { ManualCitationForm } from "@/components/ManualCitationForm";
+import { WelcomeTour } from "@/components/WelcomeTour";
 import {
   CitationRecord,
   DecodedQuestion,
@@ -25,9 +26,11 @@ import { auditCitations, CitationAuditResult } from "@/lib/citation/audit";
 import {
   addSavedReference,
   exportReferencesToFile,
+  hasSeenIntro,
   importReferencesFromJson,
   loadProjectName,
   loadSavedReferences,
+  markIntroSeen,
   removeSavedReference,
   saveProjectName,
 } from "@/lib/storage/local-references";
@@ -101,11 +104,18 @@ export default function Page() {
   const [projectName, setProjectName] = useState("My assignment");
   const [manualEntryOpen, setManualEntryOpen] = useState(false);
   const [importMessage, setImportMessage] = useState<{ text: string; isError: boolean } | null>(null);
+  const [showTour, setShowTour] = useState(false);
 
   useEffect(() => {
     setSavedRefs(loadSavedReferences());
     setProjectName(loadProjectName());
+    if (!hasSeenIntro()) setShowTour(true);
   }, []);
+
+  function closeTour() {
+    markIntroSeen();
+    setShowTour(false);
+  }
 
   function switchView(next: ToolView) {
     setView(next);
@@ -292,11 +302,17 @@ export default function Page() {
   return (
     <div>
       <Header savedCount={savedRefs.length} />
-      <p className="mb-4 max-w-2xl text-sm text-neutral-700">
+      <p className="mb-2 max-w-2xl text-sm text-neutral-700">
         Free evidence search and Harvard/APA referencing built for CIPD assignments, so you spend less time
         chasing paywalled journals and more time writing. Evidence is sourced live from OpenAlex, Crossref
         and DOAJ: open-access, peer-reviewed literature only.
       </p>
+      <button
+        className="mb-4 text-xs font-medium text-primary-dark underline-offset-2 hover:underline"
+        onClick={() => setShowTour(true)}
+      >
+        How this works
+      </button>
       <ToolTabs active={view} onChange={switchView} />
       <ProgressStrip activeIndex={savedRefs.length > 0 ? 3 : stepIndex} />
 
@@ -627,6 +643,8 @@ export default function Page() {
           onAdd={handleAddManualCitation}
         />
       )}
+
+      {showTour && <WelcomeTour onClose={closeTour} />}
 
       <Footer />
     </div>
