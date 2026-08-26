@@ -27,12 +27,9 @@ jobs:
       # The npm version bundled with Node 20 on GitHub-hosted runners has a
       # known bug in its dependency resolver (Arborist) that crashes with
       # "Cannot read properties of null (reading 'edgesOut')" when resolving
-      # vitest 4.x's optional peer dependencies. Upgrading npm before install
-      # avoids the crash. Confirmed fixed on npm 12.0.2.
-      - name: Upgrade npm
-        run: npm install -g npm@12.0.2
-
-      - run: npm install
+      # vitest 4.x's optional peer dependencies. --legacy-peer-deps sidesteps
+      # the buggy resolution path. Confirmed this installs cleanly.
+      - run: npm install --legacy-peer-deps
 
       - name: Lint
         run: npm run lint
