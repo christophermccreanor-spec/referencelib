@@ -9,7 +9,6 @@ export default function AcademicIntegrityPage() {
         ← Back to ReferenceLib
       </Link>
       <div className="panel mt-4">
-        <span className="badge">First draft, pending Christopher McCreanor&apos;s review</span>
         <h1 className="text-base font-medium">Academic-integrity policy</h1>
         <p className="text-sm text-neutral-700">
           ReferenceLib is a research and citation support tool. It is built to keep a firm, deliberate line
