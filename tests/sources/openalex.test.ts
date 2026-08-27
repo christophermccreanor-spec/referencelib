@@ -94,6 +94,64 @@ describe("searchOpenAlex", () => {
     });
   });
 
+  it("regression: falls back to the landing page when pdf_url points at a graphical-abstract image, not the paper", () => {
+    // Found live: this exact ars.els-cdn.com URL shape was returned as
+    // best_oa_location.pdf_url for a ScienceDirect article. It is a
+    // thumbnail of the paper's graphical abstract, not the full text, so
+    // clicking "Read free" opened a picture instead of the source.
+    mockOpenAlexResponse([
+      {
+        id: "https://openalex.org/W5",
+        doi: "https://doi.org/10.1/example2",
+        title: "The joint impact of green HRM and culture",
+        publication_year: 2021,
+        type: "article",
+        authorships: [],
+        primary_location: { source: { display_name: "Journal of Cleaner Production", type: "journal" } },
+        open_access: { is_oa: true },
+        best_oa_location: {
+          pdf_url: "https://ars.els-cdn.com/content/image/1-s2.0-S0959652621023301-ga1_lrg.jpg",
+          landing_page_url: "https://www.sciencedirect.com/science/article/pii/S0959652621023301",
+          version: "publishedVersion",
+        },
+      },
+    ]);
+
+    return searchOpenAlex("test").then((cards) => {
+      expect(cards[0].fullTextUrl).toBe(
+        "https://www.sciencedirect.com/science/article/pii/S0959652621023301"
+      );
+    });
+  });
+
+  it("keeps a real pdf_url that happens to use query params or non-.pdf paths", () => {
+    // Guards against over-fixing: legitimate full-text links seen live
+    // rarely end in a plain ".pdf" (DOI redirects, "/pdf/full" paths,
+    // "?type=printable" query strings), so the fix must not reject these.
+    mockOpenAlexResponse([
+      {
+        id: "https://openalex.org/W6",
+        doi: null,
+        title: "A systematic review",
+        publication_year: 2018,
+        type: "article",
+        authorships: [],
+        primary_location: { source: { display_name: "PLoS ONE", type: "journal" } },
+        open_access: { is_oa: true },
+        best_oa_location: {
+          pdf_url: "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0203000&type=printable",
+          version: "publishedVersion",
+        },
+      },
+    ]);
+
+    return searchOpenAlex("test").then((cards) => {
+      expect(cards[0].fullTextUrl).toBe(
+        "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0203000&type=printable"
+      );
+    });
+  });
+
   it("throws a clear error when the OpenAlex request fails", () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503 }) as unknown as typeof fetch;
     return expect(searchOpenAlex("test")).rejects.toThrow("OpenAlex request failed: 503");
