@@ -14,6 +14,22 @@ const STOPWORDS = new Set([
   "response", "should", "must", "will", "shall", "particularly", "focus",
   "ensure", "need", "needs", "make", "sure", "clearly", "fully", "answer",
   "submission", "also", "further",
+  // Auxiliary/modal verb forms and closed-class prepositions/conjunctions.
+  // Assignment-brief questions rarely need these filtered, since they read
+  // as command-verb imperatives followed by noun-phrase lists ("evaluate
+  // the impact of X on Y"). A student's own written paragraph is ordinary
+  // prose, full of copulas and prepositions ("organisational culture HAS a
+  // significant influence... THROUGH the psychological safety it creates
+  // WITHIN teams"). Left unfiltered, every one of these leaks through as if
+  // it were a content word: it crowds a real concept out of the six-word
+  // cap below, and pollutes the search query sent to OpenAlex with noise.
+  // Found via a live paragraph on organisational culture and wellbeing
+  // that, because of exactly this, returned four completely unrelated
+  // results (AI ethics, an unrelated theology journal, and so on).
+  "has", "have", "had", "having", "was", "were", "am", "been", "being", "did",
+  "would", "could", "might", "through", "within", "without", "despite", "upon",
+  "towards", "toward", "against", "during", "which", "who", "whom", "whose",
+  "but", "so", "than",
 ]);
 
 const COMMAND_VERBS = [
