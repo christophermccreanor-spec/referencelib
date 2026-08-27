@@ -83,9 +83,27 @@ export async function searchOpenAlex(
     .map((work) => toEvidenceCard(work));
 }
 
+// OpenAlex's pdf_url (sourced from Unpaywall) is not always actually a PDF
+// or article page. Found live: a ScienceDirect record whose pdf_url was
+// https://ars.els-cdn.com/content/image/1-s2.0-...-ga1_lrg.jpg, a
+// graphical-abstract thumbnail, not the paper, so "Read free" opened a
+// picture instead of the source. Rather than guess at what a real
+// full-text URL looks like (legitimate ones vary too widely: DOI
+// redirects, "/pdf/full" paths, "?type=printable" query params), this
+// blocks the specific, identifiable shapes of a non-document asset: an
+// image/media file extension, or Elsevier's own "/content/image/" CDN
+// path convention for exactly this kind of thumbnail.
+const NON_DOCUMENT_URL_PATTERN =
+  /\.(jpe?g|png|gif|svg|webp|bmp|tiff?|ico|mp4|mp3|avi|zip)(?:$|[?#])|\/content\/image\//i;
+
+function isLikelyFullTextUrl(url: string | null | undefined): url is string {
+  return Boolean(url) && !NON_DOCUMENT_URL_PATTERN.test(url as string);
+}
+
 function toEvidenceCard(work: OpenAlexWork): EvidenceCardData {
   const oaLocation = work.best_oa_location ?? work.primary_location;
-  const fullTextUrl = oaLocation?.pdf_url ?? oaLocation?.landing_page_url ?? null;
+  const fullTextUrl =
+    [oaLocation?.pdf_url, oaLocation?.landing_page_url].find(isLikelyFullTextUrl) ?? null;
   const version = mapVersion(oaLocation?.version ?? null);
   const isPreprint = work.type === "preprint" || version === "preprint";
   const sourceType = work.primary_location?.source?.type ?? work.type ?? "unknown";
