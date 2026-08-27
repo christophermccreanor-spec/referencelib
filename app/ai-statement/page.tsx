@@ -9,7 +9,6 @@ export default function AiStatementPage() {
         ← Back to ReferenceLib
       </Link>
       <div className="panel mt-4">
-        <span className="badge">First draft, pending Christopher McCreanor&apos;s review</span>
         <h1 className="text-base font-medium">AI and technology-use statement</h1>
 
         <h2 className="text-sm font-medium">What is live today</h2>
