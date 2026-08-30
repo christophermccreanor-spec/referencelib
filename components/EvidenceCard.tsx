@@ -39,7 +39,12 @@ export function EvidenceCard({
       </div>
       <div className="flex flex-wrap gap-1.5">
         <span className="badge">{PEER_REVIEW_LABEL[card.peerReview]}</span>
-        {card.openAccess === "open" && <span className="badge">Free full text</span>}
+        {/* Badge now reflects our own resolved link, not OpenAlex's work-level
+            is_oa flag: a work can be "open access" somewhere while we still
+            have no safe, working link to it (see lib/sources/openalex.ts),
+            and showing the badge in that case is exactly what promised
+            students a free read they then could not get. */}
+        {card.fullTextUrl && <span className="badge">Free full text</span>}
         <span className="badge">{card.version.replace(/-/g, " ")}</span>
       </div>
       <div className="flex flex-wrap gap-2">
