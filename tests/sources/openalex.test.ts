@@ -152,6 +152,38 @@ describe("searchOpenAlex", () => {
     });
   });
 
+  it("regression: does not fall back to primary_location for the free-text link when best_oa_location is missing", () => {
+    // Found from real student testing (28 August 2026): several results
+    // marked as free open access opened onto a publisher paywall instead.
+    // Root cause: when OpenAlex has not populated best_oa_location for a
+    // work (a data-quality gap that happens even when open_access.is_oa is
+    // true), the old code fell back to primary_location, which is just
+    // wherever the work was indexed from and carries no OA guarantee at
+    // all. This work has a primary_location landing page but no
+    // best_oa_location, mirroring what a paywalled publisher record looks
+    // like from the API. fullTextUrl must be null, not that paywalled URL.
+    mockOpenAlexResponse([
+      {
+        id: "https://openalex.org/W7",
+        doi: "https://doi.org/10.1/example3",
+        title: "A paywalled record with no vouched-for OA location",
+        publication_year: 2019,
+        type: "article",
+        authorships: [],
+        primary_location: {
+          source: { display_name: "Some Publisher Journal", type: "journal" },
+          landing_page_url: "https://paywalled-publisher.example.com/article/123",
+          is_oa: false,
+        },
+        open_access: { is_oa: true },
+      },
+    ]);
+
+    return searchOpenAlex("test").then((cards) => {
+      expect(cards[0].fullTextUrl).toBeNull();
+    });
+  });
+
   it("throws a clear error when the OpenAlex request fails", () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503 }) as unknown as typeof fetch;
     return expect(searchOpenAlex("test")).rejects.toThrow("OpenAlex request failed: 503");
