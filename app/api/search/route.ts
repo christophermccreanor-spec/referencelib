@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchOpenAlex } from "@/lib/sources/openalex";
 import { isJournalInDOAJ } from "@/lib/sources/doaj";
 import { EvidenceCardData } from "@/lib/types";
+import { effectiveSinceYear } from "@/lib/search/recency";
 import { searchRateLimit, clientIp, getCached, setCached } from "@/lib/upstash";
 
 const CONTACT_EMAIL = process.env.CROSSREF_CONTACT_EMAIL || "christophermccreanor@gmail.com";
@@ -14,11 +15,18 @@ interface SearchPayload {
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const terms: string[] = Array.isArray(body?.terms) ? body.terms.filter(Boolean) : [];
-  const sinceYear: number | undefined = typeof body?.sinceYear === "number" ? body.sinceYear : undefined;
+  const requestedSinceYear: number | undefined =
+    typeof body?.sinceYear === "number" ? body.sinceYear : undefined;
 
   if (terms.length === 0) {
     return NextResponse.json({ error: "At least one search term is required." }, { status: 400 });
   }
+
+  // Enforce the recency floor even when the client sends no year (the common
+  // case: the "Evidence from year" field is optional and usually left blank),
+  // so peer-reviewed evidence stays within the last few years by default
+  // rather than reaching back decades. See lib/search/recency.ts.
+  const sinceYear = effectiveSinceYear(requestedSinceYear);
 
   // Per-IP rate limiting, architecture doc section 6. Fails open (no limiter
   // object) when Upstash isn't configured, so local development and any
