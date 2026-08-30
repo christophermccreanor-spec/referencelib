@@ -184,6 +184,133 @@ describe("searchOpenAlex", () => {
     });
   });
 
+  it("regression: drops an off-topic collision that shares one incidental word with the query", () => {
+    // A cancer-chemotherapy paper ranked into a "recruitment selection
+    // candidate experience" search on the strength of "drug candidates".
+    // Health Sciences domain + only one query concept in the title => dropped.
+    mockOpenAlexResponse([
+      {
+        id: "https://openalex.org/W8",
+        doi: "https://doi.org/10.1/onco",
+        title: "Cancer chemotherapy and beyond: Current status, drug candidates, associated risks",
+        publication_year: 2022,
+        type: "article",
+        authorships: [],
+        primary_location: { source: { display_name: "Genes & Diseases", type: "journal" } },
+        primary_topic: { domain: { display_name: "Health Sciences" } },
+        open_access: { is_oa: true },
+        best_oa_location: {
+          pdf_url: "https://example.org/onco.pdf",
+          version: "publishedVersion",
+        },
+      },
+      {
+        id: "https://openalex.org/W9",
+        doi: "https://doi.org/10.1/hr",
+        title: "Memorable Candidate Experiences Throughout the Recruitment and Selection Process",
+        publication_year: 2024,
+        type: "article",
+        authorships: [],
+        primary_location: { source: { display_name: "HR Journal", type: "journal" } },
+        primary_topic: { domain: { display_name: "Social Sciences" } },
+        open_access: { is_oa: true },
+        best_oa_location: {
+          pdf_url: "https://example.org/hr.pdf",
+          version: "publishedVersion",
+        },
+      },
+    ]);
+
+    return searchOpenAlex("recruitment selection candidate experience").then((cards) => {
+      expect(cards).toHaveLength(1);
+      expect(cards[0].title).toContain("Candidate Experiences");
+    });
+  });
+
+  it("prefers a published-version PDF from another OA location over a best_oa_location landing page", () => {
+    // best_oa_location is a publisher landing page (no PDF) — where access
+    // walls appear. A PMC copy of the same version of record offers a direct
+    // PDF, so the free-text link should be that PDF, not the publisher page.
+    mockOpenAlexResponse([
+      {
+        id: "https://openalex.org/W10",
+        doi: "https://doi.org/10.1/example4",
+        title: "Flexible working and employee performance",
+        publication_year: 2023,
+        type: "article",
+        authorships: [],
+        primary_location: { source: { display_name: "Publisher Journal", type: "journal" } },
+        primary_topic: { domain: { display_name: "Social Sciences" } },
+        open_access: { is_oa: true },
+        best_oa_location: {
+          landing_page_url: "https://publisher.example.com/article/abc",
+          version: "publishedVersion",
+        },
+        locations: [
+          {
+            is_oa: true,
+            version: "publishedVersion",
+            landing_page_url: "https://publisher.example.com/article/abc",
+            source: { type: "journal" },
+          },
+          {
+            is_oa: true,
+            version: "publishedVersion",
+            pdf_url: "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC123456/pdf/main.pdf",
+            source: { type: "repository" },
+          },
+        ],
+      },
+    ]);
+
+    return searchOpenAlex("flexible working employee performance").then((cards) => {
+      expect(cards[0].fullTextUrl).toBe(
+        "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC123456/pdf/main.pdf"
+      );
+    });
+  });
+
+  it("does not surface a submitted-version (preprint) repository copy as the free link", () => {
+    // Only published-version OA locations are eligible for the cross-location
+    // rescue; a submitted-version manuscript must not stand in for the source.
+    // Here best_oa_location has the published PDF, so that is used.
+    mockOpenAlexResponse([
+      {
+        id: "https://openalex.org/W11",
+        doi: "https://doi.org/10.1/example5",
+        title: "Talent retention and development",
+        publication_year: 2023,
+        type: "article",
+        authorships: [],
+        primary_location: { source: { display_name: "HR Journal", type: "journal" } },
+        primary_topic: { domain: { display_name: "Social Sciences" } },
+        open_access: { is_oa: true },
+        best_oa_location: {
+          pdf_url: "https://example.org/published.pdf",
+          version: "publishedVersion",
+        },
+        locations: [
+          {
+            is_oa: true,
+            version: "submittedVersion",
+            pdf_url: "https://repository.example.edu/preprint.pdf",
+            source: { type: "repository" },
+          },
+          {
+            is_oa: true,
+            version: "publishedVersion",
+            pdf_url: "https://example.org/published.pdf",
+            source: { type: "journal" },
+          },
+        ],
+      },
+    ]);
+
+    return searchOpenAlex("talent retention development").then((cards) => {
+      expect(cards[0].fullTextUrl).toBe("https://example.org/published.pdf");
+    });
+  });
+
   it("throws a clear error when the OpenAlex request fails", () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503 }) as unknown as typeof fetch;
     return expect(searchOpenAlex("test")).rejects.toThrow("OpenAlex request failed: 503");

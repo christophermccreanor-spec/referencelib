@@ -52,8 +52,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Over-fetch: the relevance gate (lib/search/relevance.ts) and the
+    // preprint / free-link filters below both drop results, so ask OpenAlex
+    // for more than the 8 shown to keep the panel full after filtering.
     const results = await searchOpenAlex(query, {
-      perPage: 8,
+      perPage: 14,
       sinceYear,
       contactEmail: CONTACT_EMAIL,
     });
@@ -66,7 +69,9 @@ export async function POST(req: NextRequest) {
     // testing on 28 August 2026 click through to a paywall. The paragraph
     // route (app/api/paragraph/route.ts) already filtered this way; Find
     // evidence did not, which was the gap.
-    const filtered = results.filter((r) => !r.isPreprint && r.fullTextUrl);
+    const filtered = results
+      .filter((r) => !r.isPreprint && r.fullTextUrl)
+      .slice(0, 8);
 
     // Upgrade peer-review label to "verified" only where DOAJ confirms the
     // journal, checked for at most the top 5 results to stay inside DOAJ's

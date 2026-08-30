@@ -1,4 +1,5 @@
 import { EvidenceCardData, PeerReviewLabel, SourceVersion } from "@/lib/types";
+import { isRelevantResult } from "@/lib/search/relevance";
 
 const OPENALEX_BASE = "https://api.openalex.org/works";
 
@@ -23,6 +24,22 @@ interface OpenAlexWork {
     version?: string | null;
     license?: string | null;
   };
+  // Every OA location OpenAlex/Unpaywall knows for the work, not just the one
+  // it picked as "best". Used to prefer a directly-openable published-version
+  // PDF over a publisher landing page (which is where access walls appear).
+  locations?: {
+    is_oa?: boolean;
+    version?: string | null;
+    pdf_url?: string | null;
+    landing_page_url?: string | null;
+    source?: { type?: string | null } | null;
+  }[];
+  // Topic classification (developers.openalex.org). The domain is the coarse
+  // bucket (Social Sciences / Health Sciences / Life Sciences / Physical
+  // Sciences) used by the relevance gate to drop off-topic collisions.
+  primary_topic?: {
+    domain?: { display_name?: string | null } | null;
+  } | null;
   // Confirmed via OpenAlex's official API reference
   // (developers.openalex.org/api-reference/works/get-a-single-work): every
   // Work carries this object, all fields nullable strings. Capturing it is
@@ -80,6 +97,12 @@ export async function searchOpenAlex(
   const data = (await res.json()) as { results: OpenAlexWork[] };
   return data.results
     .filter((work) => work.title)
+    // Drop off-topic keyword collisions (a cancer paper under "candidate", a
+    // drone remote-sensing review under "remote"): see lib/search/relevance.ts.
+    // Single-concept queries are passed through unfiltered by that gate.
+    .filter((work) =>
+      isRelevantResult(query, work.title, work.primary_topic?.domain?.display_name ?? null)
+    )
     .map((work) => toEvidenceCard(work));
 }
 
@@ -100,6 +123,31 @@ function isLikelyFullTextUrl(url: string | null | undefined): url is string {
   return Boolean(url) && !NON_DOCUMENT_URL_PATTERN.test(url as string);
 }
 
+// Choose the free-text link, preferring what a student can actually open.
+// best_oa_location's own PDF stays the first choice (it is OpenAlex's vetted
+// pick and keeps the prior graphical-abstract fix intact), but when that only
+// offers a publisher *landing page* — where sign-in/access walls live — this
+// reaches across the work's other open-access locations for a
+// published-version PDF (e.g. a PMC or repository copy of the version of
+// record) before falling back to the landing page. Only is_oa,
+// published-version locations are considered, so no preprint or
+// author-manuscript is ever surfaced as the source. Order is deliberate:
+// best PDF, then any published-version PDF, then best landing page, then any
+// published-version landing page. When the work carries no vouched-for OA
+// location at all, this returns null (never a paywalled primary_location).
+function selectFullTextUrl(work: OpenAlexWork): string | null {
+  const publishedOa = (work.locations ?? []).filter(
+    (loc) => loc?.is_oa && loc.version === "publishedVersion"
+  );
+  const ordered: (string | null | undefined)[] = [
+    work.best_oa_location?.pdf_url,
+    ...publishedOa.map((loc) => loc.pdf_url),
+    work.best_oa_location?.landing_page_url,
+    ...publishedOa.map((loc) => loc.landing_page_url),
+  ];
+  return ordered.find(isLikelyFullTextUrl) ?? null;
+}
+
 // Found from student testing (28 August 2026): several "free" results
 // opened onto a publisher paywall instead. Root cause was here, not in
 // OpenAlex's data: best_oa_location is OpenAlex/Unpaywall's own vouched-for
@@ -116,10 +164,7 @@ function isLikelyFullTextUrl(url: string | null | undefined): url is string {
 // status even when there is no working free-text link to show, so that one
 // field alone keeps its old fallback.
 function toEvidenceCard(work: OpenAlexWork): EvidenceCardData {
-  const fullTextUrl =
-    [work.best_oa_location?.pdf_url, work.best_oa_location?.landing_page_url].find(
-      isLikelyFullTextUrl
-    ) ?? null;
+  const fullTextUrl = selectFullTextUrl(work);
   const version = mapVersion(work.best_oa_location?.version ?? work.primary_location?.version ?? null);
   const isPreprint = work.type === "preprint" || version === "preprint";
   const sourceType = work.primary_location?.source?.type ?? work.type ?? "unknown";
