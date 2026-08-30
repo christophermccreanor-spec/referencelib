@@ -100,11 +100,27 @@ function isLikelyFullTextUrl(url: string | null | undefined): url is string {
   return Boolean(url) && !NON_DOCUMENT_URL_PATTERN.test(url as string);
 }
 
+// Found from student testing (28 August 2026): several "free" results
+// opened onto a publisher paywall instead. Root cause was here, not in
+// OpenAlex's data: best_oa_location is OpenAlex/Unpaywall's own vouched-for
+// open-access location, but primary_location is just wherever the work was
+// indexed from, often the publisher's page, with no OA guarantee at all.
+// The old code fell back to primary_location whenever best_oa_location was
+// missing, so a work with open_access.is_oa:true (a data-quality edge case
+// where OpenAlex has not populated a best_oa_location for it) could still
+// hand back a fullTextUrl pointing straight at a paywall. There is no safe
+// fallback for the *link* when best_oa_location is missing: if OpenAlex has
+// not vouched for a specific OA location, this returns no link at all
+// rather than guessing. The version label is a separate concern from the
+// link: primary_location.version is still a legitimate signal of preprint
+// status even when there is no working free-text link to show, so that one
+// field alone keeps its old fallback.
 function toEvidenceCard(work: OpenAlexWork): EvidenceCardData {
-  const oaLocation = work.best_oa_location ?? work.primary_location;
   const fullTextUrl =
-    [oaLocation?.pdf_url, oaLocation?.landing_page_url].find(isLikelyFullTextUrl) ?? null;
-  const version = mapVersion(oaLocation?.version ?? null);
+    [work.best_oa_location?.pdf_url, work.best_oa_location?.landing_page_url].find(
+      isLikelyFullTextUrl
+    ) ?? null;
+  const version = mapVersion(work.best_oa_location?.version ?? work.primary_location?.version ?? null);
   const isPreprint = work.type === "preprint" || version === "preprint";
   const sourceType = work.primary_location?.source?.type ?? work.type ?? "unknown";
 
