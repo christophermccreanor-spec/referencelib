@@ -51,8 +51,14 @@ export async function POST(req: NextRequest) {
     });
 
     // Preprints excluded by default, per blueprint section 6. Unknown
-    // peer-review status is never presented as verified.
-    const filtered = results.filter((r) => !r.isPreprint);
+    // peer-review status is never presented as verified. Also requires a
+    // resolved fullTextUrl: the results panel promises "Free full text
+    // only" (app/page.tsx), but before this fix a card with no working
+    // free link could still appear, which is exactly what let students
+    // testing on 28 August 2026 click through to a paywall. The paragraph
+    // route (app/api/paragraph/route.ts) already filtered this way; Find
+    // evidence did not, which was the gap.
+    const filtered = results.filter((r) => !r.isPreprint && r.fullTextUrl);
 
     // Upgrade peer-review label to "verified" only where DOAJ confirms the
     // journal, checked for at most the top 5 results to stay inside DOAJ's
